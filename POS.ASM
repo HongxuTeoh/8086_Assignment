@@ -14,11 +14,20 @@ InputBuffer DB 5, 0, 5 DUP(0)     ; Input buffer: max 3 digits + Enter key
 EnterNewPricePrompt DB 'Enter new price (up to 3 digits): $'
 ErrorMsg DB 'Error opening or writing file!$', 0
 
-.CODE
+; ------ LOGIN  ------ ;
+Divider         DB  79 DUP("="),"$"
+LoginPage_MSG   DB  13,10,"Welcome. Please Enter your User Name and Password. $"
+User_MSG        DB  13,10,"User Name: $" 
+PSW_MSG         DB  13,10,"Password: $"
 
+.CODE
 MAIN PROC
     MOV AX,@DATA
     MOV DS,AX
+
+    ; ------ START OF CODE ------ ;
+
+    CALL LOGIN
 
     CALL MAIN_MENU  ; Call the MAIN_MENU procedure
     ; Further processing can be done here after returning from MAIN_MENU
@@ -27,6 +36,19 @@ MAIN PROC
     INT 21H         ; Call DOS interrupt to terminate the program
 
 MAIN ENDP
+
+LOGIN PROC
+    MOV     AX,3    ; clear screen
+    INT     10H
+
+    MOV     AH,09H
+    LEA     DX,Divider
+    INT     21H
+
+    MOV     AH,09H
+    LEA     DX,LoginPage_MSG
+    INT     21H
+
 
 MAIN_MENU PROC
     ; Display menu options

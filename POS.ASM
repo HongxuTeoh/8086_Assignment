@@ -2,24 +2,30 @@
 .STACK 64
 
 .DATA
-MenuOptions DB '1) Purchase$'
+ MenuOptions DB '1) Purchase$'
             DB '2) Edit Product Price$'
             DB '3) Add Coupon$'
             DB '4) Logout$', 0
 
-SelectPrompt DB 'Select product number to edit (1-4): $'
-FileName DB 'product.txt', 0
-ProductBuffer DB 100 DUP(0)       ; Buffer to store product data
-InputBuffer DB 5, 0, 5 DUP(0)     ; Input buffer: max 3 digits + Enter key
-EnterNewPricePrompt DB 'Enter new price (up to 3 digits): $'
-ErrorMsg DB 'Error opening or writing file!$', 0
+ SelectPrompt DB 'Select product number to edit (1-4): $'
+ FileName DB 'product.txt', 0
+ ProductBuffer DB 100 DUP(0)       ; Buffer to store product data
+ InputBuffer DB 5, 0, 5 DUP(0)     ; Input buffer: max 3 digits + Enter key
+ EnterNewPricePrompt DB 'Enter new price (up to 3 digits): $'
+ ErrorMsg DB 'Error opening or writing file!$', 0
 
 ; ------ LOGIN  ------ ;
-Divider         DB  79 DUP("="),"$"
-LoginPage_MSG   DB  13,10,"Welcome. Please Enter your User Name and Password. $"
-User_MSG        DB  13,10,"User Name: $" 
-PSW_MSG         DB  13,10,"Password: $"
-
+ Divider            DB  79 DUP("="),"$"
+ NEW_LINE           DB  13,10,"$"
+ LOGIN_MSG1         DB  13,10,"WELCOME TO TECH GENIUS SOLUTIONS SYSTEM. $"
+ LOGIN_MSG2         DB  13,10,"Are you a staff member? Please choose 1 or 2 if: "
+                    DB  13,10,"1-Yes, I'm a staff"
+                    DB  13,10,"2-No, I'm not a staff. (Register) $"
+ USER_MSG           DB  13,10,"User Name: $" 
+ PSW_MSG            DB  13,10,"Password: $"
+ 
+ LOGIN_CHOICE       DB  0
+ 
 .CODE
 MAIN PROC
     MOV AX,@DATA
@@ -34,21 +40,41 @@ MAIN PROC
     ; (e.g., exit the program or perform other actions)
     MOV AH, 4CH     ; DOS function to exit program
     INT 21H         ; Call DOS interrupt to terminate the program
-
+    
+    EXIT
 MAIN ENDP
 
 LOGIN PROC
     MOV     AX,3    ; clear screen
     INT     10H
 
+    MOV     AL,0    ; clear AL
+
     MOV     AH,09H
     LEA     DX,Divider
     INT     21H
-
-    MOV     AH,09H
-    LEA     DX,LoginPage_MSG
+    LEA     DX,LOGIN_MSG1       ; welcome message
+    INT     21H
+    LEA     DX,NEW_LINE
+    INT     21H
+    LEA     DX,LOGIN_MSG2       ; ask user is a staff or new user 
     INT     21H
 
+    MOV     AH,01H      ; user input 1 or 2 to login or register
+    INT     21H
+    MOV     LOGIN_CHOICE, AL    ; move user input into choice(login)
+;-------------------------------------------------
+    CMP     LOGIN_CHOICE,'1'
+    JE      STAFF_LOGIN
+    CMP     LOGIN_CHOICE,'2'
+    JE      REGISTER
+    JNE     ERROR_CHOICE
+;-------------------------------------------------
+    STAFF_LOGIN:
+        
+
+
+LOGIN ENDP
 
 MAIN_MENU PROC
     ; Display menu options

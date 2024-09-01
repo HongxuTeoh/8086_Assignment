@@ -15,16 +15,31 @@
  ErrorMsg DB 'Error opening or writing file!$', 0
 
 ; ------ LOGIN  ------ ;
- Divider            DB  79 DUP("="),"$"
- NEW_LINE           DB  13,10,"$"
- LOGIN_MSG1         DB  13,10,"WELCOME TO TECH GENIUS SOLUTIONS SYSTEM. $"
- LOGIN_MSG2         DB  13,10,"Are you a staff member? Please choose 1 or 2 if: "
-                    DB  13,10,"1-Yes, I'm a staff"
-                    DB  13,10,"2-No, I'm not a staff. (Register) $"
- USER_MSG           DB  13,10,"User Name: $" 
- PSW_MSG            DB  13,10,"Password: $"
+ Divider            DB  79 DUP ("="),"$"
+ NewLine            DB  13,10,"$"
+ StartPageMessage_1 DB  13,10,"WELCOME TO TECH GENIUS SOLUTIONS SYSTEM. $"
+ StartPageMessage_2 DB  13,10,"Are you a staff member?"
+                    DB  13,10,"1 - Yes, I'm a staff. "
+                    DB  13,10,"2 - No, I'm not a staff. (Register) "
+                    DB  13,10,"Please choose (1 or 2): $"
+ LoginOrRegister    DB  0
  
- LOGIN_CHOICE       DB  0
+ LoginMessage       DB  13,10,"Please enter your User Name and Password. $"
+ UsernameMessage    DB  13,10,"User Name: $" 
+ PasswordMessage    DB  13,10,"Password: $"
+ Username_ADATA     DB      5 DUP(?)
+ Password_ADATA     DB      10 DUP(?)
+
+ CorrectUsername    DB  "Admin"
+ CorrectPassword    DB  "admin!1234"
+
+ ValidMessage       DB  13,10,"Access Granted! Welcome back. $"
+ InvalidMessage     DB  13,10,"[ERROR] Invalid Credentials! Please try again. $"
+ InvalidMessage_P1  DB  13,10,"You still have $"
+ InvalidMessage_P2  DB  " more chance(s). $"
+ LoginCount         DB  3
+
+ ExitProgramMessage DB  13,10,"Exiting Program. Goodbye. $"
  
 .CODE
 MAIN PROC
@@ -38,42 +53,136 @@ MAIN PROC
     CALL MAIN_MENU  ; Call the MAIN_MENU procedure
     ; Further processing can be done here after returning from MAIN_MENU
     ; (e.g., exit the program or perform other actions)
+    
+
+    EXIT_PROGRAM: 
+    ; ------ END OF CODE ------ ;
     MOV AH, 4CH     ; DOS function to exit program
     INT 21H         ; Call DOS interrupt to terminate the program
-    
-    EXIT
 MAIN ENDP
 
 LOGIN PROC
     MOV     AX,3    ; clear screen
-    INT     10H
+    INT     10H     ; call interrupt service
 
-    MOV     AL,0    ; clear AL
+    XOR     AX,AX    ; clear AX
+
+    MOV     AH,09H      ; request display string
+    LEA     DX,Divider  ; display the divider
+    INT     21H         ; call interrupt service
 
     MOV     AH,09H
-    LEA     DX,Divider
+    LEA     DX,StartPageMessage_1       ; welcome message
     INT     21H
-    LEA     DX,LOGIN_MSG1       ; welcome message
+    LEA     DX,NewLine
     INT     21H
-    LEA     DX,NEW_LINE
-    INT     21H
-    LEA     DX,LOGIN_MSG2       ; ask user is a staff or new user 
+    LEA     DX,StartPageMessage_2       ; ask user is a staff or new user 
     INT     21H
 
     MOV     AH,01H      ; user input 1 or 2 to login or register
     INT     21H
-    MOV     LOGIN_CHOICE, AL    ; move user input into choice(login)
+    MOV     LoginOrRegister, AL    ; move user input into LoginOrRegister
 ;-------------------------------------------------
-    CMP     LOGIN_CHOICE,'1'
+    CMP     LoginOrRegister,'1'
     JE      STAFF_LOGIN
-    CMP     LOGIN_CHOICE,'2'
+    CMP     LoginOrRegister,'2'
     JE      REGISTER
     JNE     ERROR_CHOICE
 ;-------------------------------------------------
     STAFF_LOGIN:
-        
+        MOV     AH,09H              ; request display string
+        LEA     DX,LoginMessage     ; ask user to input userName and password
+        INT     21H
 
+        LOGIN_AGAIN: 
+        MOV     AH,09H
+        LEA     DX,NewLine
+        INT     21H
 
+        MOV     AH,09H              ; request display string
+        LEA     DX,UsernameMessage  ; display "User Name: " message
+        INT     21H
+
+        XOR     CX,CX   ; clear CX
+        MOV     CX,5    ; set CX=5 to loop five time
+        MOV     SI,0
+        GET_NAME:           ; using loop to get user name
+            MOV     AH,01H
+            INT     21H
+            MOV     Username_ADATA[SI],AL
+            INC     SI
+            LOOP    GET_NAME
+
+        MOV     AH,09H              ; request display string
+        LEA     DX,PasswordMessage  ; display "password: " message
+        INT     21H
+
+        XOR     CX,CX           ; clear CX
+        MOV     CX,10           ; set CX=10 to loop ans get the user input password
+        MOV     SI,0
+        GET_PASSWORD:       ; using loop to get user password
+            MOV     AH,07H
+            INT     21H
+            MOV     Password_ADATA[SI],AL
+            INC     SI
+            MOV     AH,02H  
+            MOV     DL,"*"  ; to display the user input into * 
+            INT     21H
+            LOOP    GET_PASSWORD
+    ;-----------------------------------------------------------------------
+        MOV     SI,0    ;use for loop to checj the user name 
+        MOV     DI,0    ;use for loop to check the user password
+
+        CHK_NAME:
+            CMP     SI,5
+            JE      CHK_PSW
+            MOV     AL,CorrectUsername[SI]
+            CMP     AL,Username_ADATA[SI]
+            JE      NNAME
+            JNE     LOGIN_ERROR
+        NNAME:
+            INC     SI
+            JMP     CHK_NAME
+    ;-----------------------------------------------------------------------
+        CHK_PSW:
+            CMP     DI,10
+            JE      LOGIN_SUCCESSFUL
+            MOV     AL,CorrectPassword[DI]
+            CMP     AL,Password_ADATA[DI]
+            JE      NPSW
+            JNE     LOGIN_ERROR
+        NPSW:
+            INC     DI
+            JMP     CHK_PSW
+    ;-----------------------------------------------------------------------
+        LOGIN_ERROR:
+            DEC     LoginCount              ; login chance - 1
+
+            MOV     AH,09H
+            LEA     DX,InvalidMessage       ; display error message
+            INT     21H
+
+            MOV     AH,09H
+            LEA     DX,InvalidMessage_P1    ; display how many chances left
+            INT     21H
+
+            MOV     AH,02H
+            MOV     DL,LoginCount           ; DL=chances left 
+            ADD     DL,30H                  ; add 30H to display as "2" in ASCII code
+            INT     21H
+
+            MOV     AH,09H
+            LEA     DX,InvalidMessage_P2
+            INT     21H
+            CMP     LoginCount,0
+            JE      EXIT_LOGIN
+            JNE     LOGIN_AGAIN
+
+        EXIT_LOGIN:
+            MOV     AH,09H
+            LEA     DX,ExitProgramMessage
+            INT     21H
+            JMP     EXIT_PROGRAM
 LOGIN ENDP
 
 MAIN_MENU PROC

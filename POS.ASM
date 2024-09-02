@@ -17,12 +17,16 @@
 ; ------ LOGIN  ------ ;
  Divider            DB  79 DUP ("="),"$"
  NewLine            DB  13,10,"$"
- StartPageMessage_1 DB  13,10,"WELCOME TO TECH GENIUS SOLUTIONS SYSTEM. $"
+ StartPageMessage_1 DB  13,10,"WELCOME TO TECH GENIUS SOLUTIONS SYSTEM. "
+                    DB  13,10,"This is our company Point-of-Sales System. "
+                    DB  13,10,"Please login or register your acccount before process to next step. $"
  StartPageMessage_2 DB  13,10,"Are you a staff member?"
                     DB  13,10,"1 - Yes, I'm a staff. "
                     DB  13,10,"2 - No, I'm not a staff. (Register) "
                     DB  13,10,"Please choose (1 or 2): $"
  LoginOrRegister    DB  0
+
+ ErrorChoiceMessage DB  13,10,"[ERROR] Invalid Input Parameter! $"
  
  LoginMessage       DB  13,10,"Please enter your User Name and Password. $"
  UsernameMessage    DB  13,10,"User Name: $" 
@@ -35,8 +39,8 @@
 
  ValidMessage       DB  13,10,"Access Granted! Welcome back. $"
  InvalidMessage     DB  13,10,"[ERROR] Invalid Credentials! Please try again. $"
- InvalidMessage_P1  DB  13,10,"You still have $"
- InvalidMessage_P2  DB  " more chance(s). $"
+ ChanceMessage_P1   DB  13,10,"You still have $"
+ ChanceMessage_P2   DB  " more chance(s). $"
  LoginCount         DB  3
 
  ExitProgramMessage DB  13,10,"Exiting Program. Goodbye. $"
@@ -74,6 +78,9 @@ LOGIN PROC
     MOV     AH,09H
     LEA     DX,StartPageMessage_1       ; welcome message
     INT     21H
+
+    CHOICE_AGAIN:
+    MOV     AH,09H
     LEA     DX,NewLine
     INT     21H
     LEA     DX,StartPageMessage_2       ; ask user is a staff or new user 
@@ -82,16 +89,35 @@ LOGIN PROC
     MOV     AH,01H      ; user input 1 or 2 to login or register
     INT     21H
     MOV     LoginOrRegister, AL    ; move user input into LoginOrRegister
-;-------------------------------------------------
+    ;-----------------------------------------------------------------------
     CMP     LoginOrRegister,'1'
-    JE      STAFF_LOGIN
+    JE      STAFF_LOGIN     ; done
     CMP     LoginOrRegister,'2'
-    JE      REGISTER
-    JNE     ERROR_CHOICE
-;-------------------------------------------------
+    JE      REGISTER        ; work in process
+    JNE     ERROR_CHOICE    ; done 
+    ;-----------------------------------------------------------------------
+    ERROR_CHOICE:
+            MOV     AH,09H
+            LEA     DX,ErrorChoiceMessage
+            INT     21H
+            JMP     CHOICE_AGAIN
+    ;-----------------------------------------------------------------------
     STAFF_LOGIN:
         MOV     AH,09H              ; request display string
         LEA     DX,LoginMessage     ; ask user to input userName and password
+        INT     21H
+
+        MOV     AH,09H
+        LEA     DX,ChanceMessage_P1 ; display how many chance(s) message
+        INT     21H
+
+        MOV     AH,02H
+        MOV     DL,LoginCount
+        MOV     AL,30H
+        INT     21H
+
+        MOV     AH,09H
+        LEA     DX,ChanceMessage_P2
         INT     21H
 
         LOGIN_AGAIN: 
@@ -130,7 +156,7 @@ LOGIN PROC
             INT     21H
             LOOP    GET_PASSWORD
     ;-----------------------------------------------------------------------
-        MOV     SI,0    ;use for loop to checj the user name 
+        MOV     SI,0    ;use for loop to checK the user name 
         MOV     DI,0    ;use for loop to check the user password
 
         CHK_NAME:
@@ -163,7 +189,7 @@ LOGIN PROC
             INT     21H
 
             MOV     AH,09H
-            LEA     DX,InvalidMessage_P1    ; display how many chances left
+            LEA     DX,ChanceMessage_P1    ; display how many chances left
             INT     21H
 
             MOV     AH,02H
@@ -172,7 +198,7 @@ LOGIN PROC
             INT     21H
 
             MOV     AH,09H
-            LEA     DX,InvalidMessage_P2
+            LEA     DX,ChanceMessage_P2
             INT     21H
             CMP     LoginCount,0
             JE      EXIT_LOGIN
@@ -183,6 +209,10 @@ LOGIN PROC
             LEA     DX,ExitProgramMessage
             INT     21H
             JMP     EXIT_PROGRAM
+    ;-----------------------------------------------------------------------
+        REGISTER:
+            
+
 LOGIN ENDP
 
 MAIN_MENU PROC

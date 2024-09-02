@@ -22,7 +22,7 @@
                     DB  13,10,"Please login or register your acccount before process to next step. $"
  StartPageMessage_2 DB  13,10,"Are you a staff member?"
                     DB  13,10,"1 - Yes, I'm a staff. "
-                    DB  13,10,"2 - No, I'm not a staff. (Register) "
+                    DB  13,10,"2 - No, I'm not a staff. "
                     DB  13,10,"Please choose (1 or 2): $"
  LoginOrRegister    DB  0
 
@@ -42,6 +42,12 @@
  ChanceMessage_P1   DB  13,10,"You still have $"
  ChanceMessage_P2   DB  " more chance(s). $"
  LoginCount         DB  3
+
+ AskForRegister     DB  13,10,"Do you want to register as a staff? "
+                    DB  13,10,"1 - Yes "
+                    DB  13,10,"2 - No"
+                    DB  13,10,"Please choose (1 or 2): "
+ RegisterChoice     DB  0
 
  ExitProgramMessage DB  13,10,"Exiting Program. Goodbye. $"
  
@@ -211,6 +217,33 @@ LOGIN PROC
             JMP     EXIT_PROGRAM
     ;-----------------------------------------------------------------------
         REGISTER:
+            MOV     AH,09H
+            LEA     DX,AskForRegister   ; display message to ask user want to register or not
+            INT     21H
+
+            MOV     AH,01H      ; user input 1=yes, 2=no
+            INT     21H         ; will store the input into AL
+
+            MOV     RegisterChoice,AL   ; move to RegisterChoice
+            CMP     RegisterChoice,'2'  ; compare the input =2 or not
+            JE      CHOICE_AGAIN        ; if yes, JMP to login page
+            CMP     RegisterChoice,'1'  ; 1=yes, then continue
+            JNE     REGISTER_ERROR      ; if input other key, will go to Register_Error
+                                        ; to display error message and JMP back here
+            ; ------- START TO REGISTER ------ ;
+            ; but i dont know how to type the code......
+            ; shit...
+
+
+    ;-----------------------------------------------------------------------
+        REGISTER_ERROR:
+            MOV     AH,09H
+            LEA     DX,ErrorChoiceMessage
+            INT     21H
+            LEA     NewLine
+            INT     21H
+            JMP     REGISTER
+
             
 
 LOGIN ENDP

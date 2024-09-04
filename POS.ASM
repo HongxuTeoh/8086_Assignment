@@ -46,8 +46,28 @@
  AskForRegister     DB  13,10,"Do you want to register as a staff? "
                     DB  13,10,"1 - Yes "
                     DB  13,10,"2 - No"
-                    DB  13,10,"Please choose (1 or 2): "
+                    DB  13,10,"Please choose (1 or 2): $"
  RegisterChoice     DB  0
+ 
+ SetUsernameMessage DB  13,10,"Set your user account in 5 value. Eg. Carol "
+                    DB  13,10,"User Name: $"
+ SetPasswordMessage DB  13,10,"Set your password in 10 value. "
+                    DB  13,10,"Password: $"
+ ConfirmPasswordMSG DB  13,10,"Please enter your password again to confirm to create new account. "
+                    DB  13,10,"Password: $"
+ 
+ RegisterConfirmMSG DB  13,10,"Account Created! "
+                    DB  13,10,"Will go back to login page. Please press any key to continue. "
+                    DB  13,10,"$"
+ RegisterErrorMSG   DB  13,10,"[ERROR] This 2 password are not same! Please try again. $"
+ RegisterExitMSG    DB  13,10,"Account fail to create. "
+                    DB  13,10,"Will go back to login page. Please press any key to continue. "
+                    DB  13,10,"$"
+
+ RegisterUsername   DB      5 DUP(?)
+ RegisterPassword   DB      10 DUP(?)
+ ConfirmPassword    DB      10 DUP(?)
+ ConfirmCount       DB  3
 
  ExitProgramMessage DB  13,10,"Exiting Program. Goodbye. $"
  
@@ -58,7 +78,7 @@ MAIN PROC
 
     ; ------ START OF CODE ------ ;
 
-    CALL LOGIN
+    CALL LOGIN      ; call the LOGIN program (done)
 
     CALL MAIN_MENU  ; Call the MAIN_MENU procedure
     ; Further processing can be done here after returning from MAIN_MENU
@@ -103,10 +123,10 @@ LOGIN PROC
     JNE     ERROR_CHOICE    ; done 
     ;-----------------------------------------------------------------------
     ERROR_CHOICE:
-            MOV     AH,09H
-            LEA     DX,ErrorChoiceMessage
-            INT     21H
-            JMP     CHOICE_AGAIN
+        MOV     AH,09H
+        LEA     DX,ErrorChoiceMessage
+        INT     21H
+        JMP     CHOICE_AGAIN
     ;-----------------------------------------------------------------------
     STAFF_LOGIN:
         MOV     AH,09H              ; request display string
@@ -189,6 +209,8 @@ LOGIN PROC
     ;-----------------------------------------------------------------------
         LOGIN_ERROR:
             DEC     LoginCount              ; login chance - 1
+            CMP     LoginCount,0
+            JE      EXIT_LOGIN
 
             MOV     AH,09H
             LEA     DX,InvalidMessage       ; display error message
@@ -206,9 +228,8 @@ LOGIN PROC
             MOV     AH,09H
             LEA     DX,ChanceMessage_P2
             INT     21H
-            CMP     LoginCount,0
-            JE      EXIT_LOGIN
-            JNE     LOGIN_AGAIN
+
+            JMP     LOGIN_AGAIN
 
         EXIT_LOGIN:
             MOV     AH,09H
@@ -216,36 +237,172 @@ LOGIN PROC
             INT     21H
             JMP     EXIT_PROGRAM
     ;-----------------------------------------------------------------------
-        REGISTER:
+    REGISTER:
+        MOV     AH,09H
+        LEA     DX,AskForRegister   ; display message to ask user want to register or not
+        INT     21H
+
+        MOV     AH,01H      ; user input 1=yes, 2=no
+        INT     21H         ; will store the input into AL
+
+        MOV     RegisterChoice,AL   ; move to RegisterChoice
+        CMP     RegisterChoice,'2'  ; compare the input =2 or not
+        JE      CHOICE_AGAIN        ; if yes, JMP to login page
+        CMP     RegisterChoice,'1'  ; if user key-in "1", after compare it will continue to the next step
+        JNE     REGISTER_ERROR      ; if input other key, will go to Register_Error
+                                    ; to display error message and JMP back here
+        ; ------- START TO REGISTER ------ ;
+        MOV     AH,09H
+        LEA     DX,SetUsernameMessage   ; display the message to let user input username
+        INT     21H
+        
+        XOR     CX,CX   ; clear CX
+        MOV     CX,5    ; set CX=5 to loop five time
+        MOV     SI,0
+        GET_REGISTER_NAME:       ; using loop to enter new user name
+            MOV     AH,01H
+            INT     21H
+            MOV     RegisterUsername[SI],AL
+            INC     SI
+            LOOP    GET_REGISTER_NAME
+
+        MOV     AH,09H
+        LEA     DX,SetPasswordMessage
+        INT     21H
+
+        XOR     CX,CX   ; clear CX
+        MOV     CX,10   ; set CX=10 to loop ten time
+        MOV     SI,0
+        GET_REGISTER_PASSWORD: 
+            MOV     AH,07H
+            INT     21H
+            MOV     RegisterPassword,AL[SI]
+            INC     SI
+            MOV     AH,02H
+            MOV     DL,"*"
+            INT     21H
+            LOOP    GET_REGISTER_PASSWORD
+
+        CONFIRM_AGAIN:
+        MOV     AH,09H
+        LEA     DX,ConfirmPasswordMSG   ; display a message to let user input password
+        INT     21H                     ; again to confirm to create a new account 
+
+        XOR     CX,CX   ; clear CX
+        MOV     CX,10   ; set CX=10 to loop ten time
+        MOV     SI,0
+        GET_CONFIRM_PASSWORD: 
+            MOV     AH,07H
+            INT     21H
+            MOV     ConfirmPassword,AL[SI]
+            INC     SI
+            MOV     AH,02H
+            MOV     DL,"*"
+            INT     21H
+            LOOP    GET_CONFIRM_PASSWORD
+;-----------------------------------------------------------------------
+        MOV     DI,0    ;use for loop to check the password
+        CHK_REGISTER_PSW:
+            CMP     DI,10
+            JE      REGISTER_SUCCESSFUL     ; DONE
+            MOV     AL,ConfirmPassword[DI]
+            CMP     AL,RegisterPassword[DI]
+            JE      NEXT_REGISTER_PSW
+            JNE     REGISTER_NEWUSER_ERROR  ; DONE
+        NEXT_REGISTER_PSW:
+            INC     DI
+            JMP     CHK_REGISTER_PSW
+;-----------------------------------------------------------------------
+        REGISTER_SUCCESSFUL: 
             MOV     AH,09H
-            LEA     DX,AskForRegister   ; display message to ask user want to register or not
+            LEA     DX,RegisterConfirmMSG   ; display create successful message
             INT     21H
 
-            MOV     AH,01H      ; user input 1=yes, 2=no
-            INT     21H         ; will store the input into AL
+            MOV     AH,01H      ; have a break to let user see about message, 
+            INT     21H         ; then user input any key will jump back to login screen
 
-            MOV     RegisterChoice,AL   ; move to RegisterChoice
-            CMP     RegisterChoice,'2'  ; compare the input =2 or not
-            JE      CHOICE_AGAIN        ; if yes, JMP to login page
-            CMP     RegisterChoice,'1'  ; 1=yes, then continue
-            JNE     REGISTER_ERROR      ; if input other key, will go to Register_Error
-                                        ; to display error message and JMP back here
-            ; ------- START TO REGISTER ------ ;
-            ; but i dont know how to type the code......
-            ; shit...
+            XOR     AL,AL       ; clear AL
+            JMP     JMP_TO_LOGIN_PAGE
 
+        REGISTER_NEWUSER_ERROR: 
+            DEC     ConfirmCount    ; confirm count (chance) - 1
+            CMP     ConfirmCount,0
+            JE      EXIT_REGISTER
 
-    ;-----------------------------------------------------------------------
-        REGISTER_ERROR:
             MOV     AH,09H
-            LEA     DX,ErrorChoiceMessage
+            LEA     DX,RegisterErrorMSG ; display message then 2 password are not same
             INT     21H
-            LEA     NewLine
+
+            MOV     AH,09H
+            LEA     DX,ChanceMessage_P1 ; display how many chance left 
             INT     21H
-            JMP     REGISTER
 
-            
+            MOV     AH,02H
+            MOV     DL,ConfirmCount
+            ADD     DL,30H
+            INT     21H
 
+            MOV     AH,09H
+            LEA     DX,ChanceMessage_P2
+            INT     21H
+
+            JMP     CONFIRM_AGAIN
+;-----------------------------------------------------------------------
+    REGISTER_ERROR:
+        MOV     AH,09H
+        LEA     DX,ErrorChoiceMessage
+        INT     21H
+        LEA     NewLine
+        INT     21H
+        JMP     REGISTER
+    
+    EXIT_REGISTER:
+        MOV     AH,09H
+        LEA     DX,RegisterExitMSG  ; display fail to create new account message
+        INT     21H
+        MOV     AH,01H      ; have a break to let user see about message, 
+        INT     21H         ; then user input any key will jump back to login screen
+        XOR     AL,AL       ; clear AL
+        
+        XOR     CX,CX
+        MOV     CX,5
+        MOV     SI,0
+        CLEAR_REGISTER_NAME:
+            XOR     RegisterUsername[SI],RegisterUsername[SI]
+            INC     SI
+            LOOP    CLEAR_REGISTER_NAME
+        
+        XOR     CX,CX
+        MOV     CX,10
+        MOV     SI,0
+        CLEAR_REGISTER_PASSWORD:
+            XOR     RegisterPassword[SI],RegisterPassword[SI]
+            INC     SI
+            LOOP    CLEAR_REGISTER_PASSWORD
+        
+        XOR     CX,CX
+        MOV     CX,10
+        MOV     SI,0
+        CLEAR_CONFIRM_PASSWORD:
+            XOR     ConfirmPassword[SI],ConfirmPassword[SI]
+            INC     SI
+            LOOP    CLEAR_CONFIRM_PASSWORD
+
+        JMP     JMP_TO_LOGIN_PAGE
+
+    JMP_TO_LOGIN_PAGE:
+        MOV     AX,3    ; clear screen
+        INT     10H     ; call interrupt service
+        
+        MOV     AH,09H      ; request display string
+        LEA     DX,Divider  ; display the divider
+        INT     21H         ; call interrupt service
+
+        MOV     AH,09H
+        LEA     DX,StartPageMessage_1       ; welcome message
+        INT     21H
+
+        JMP     CHOICE_AGAIN
 LOGIN ENDP
 
 MAIN_MENU PROC

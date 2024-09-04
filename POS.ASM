@@ -69,13 +69,15 @@
  ConfirmPassword    DB      10 DUP(?)
  ConfirmCount       DB  3
 
+ WelcomeMessage     DB  13,10,"Welcome back. $"
+
  ExitProgramMessage DB  13,10,"Exiting Program. Goodbye. $"
- 
+  
+; ------ END OF DATA DEFINITION ------
 .CODE
 MAIN PROC
     MOV AX,@DATA
     MOV DS,AX
-
     ; ------ START OF CODE ------ ;
 
     CALL LOGIN      ; call the LOGIN program (done)
@@ -119,7 +121,7 @@ LOGIN PROC
     CMP     LoginOrRegister,'1'
     JE      STAFF_LOGIN     ; done
     CMP     LoginOrRegister,'2'
-    JE      REGISTER        ; work in process
+    JE      REGISTER        ; 
     JNE     ERROR_CHOICE    ; done 
     ;-----------------------------------------------------------------------
     ERROR_CHOICE:
@@ -128,12 +130,34 @@ LOGIN PROC
         INT     21H
         JMP     CHOICE_AGAIN
     ;-----------------------------------------------------------------------
+    REGISTER:
+        MOV     AH,09H
+        LEA     DX,AskForRegister   ; display message to ask user want to register or not
+        INT     21H
+
+        MOV     AH,01H      ; user input 1=yes, 2=no
+        INT     21H         ; will store the input into AL
+
+        MOV     RegisterChoice,AL   ; move to RegisterChoice
+        CMP     RegisterChoice,'2'  ; compare the input =2 or not
+        JE      CHOICE_AGAIN        ; if yes, JMP to login page    
+        CMP     RegisterChoice,'1'  ; if user key-in "1", after compare it will continue to the next step
+        JE      START_REGISTER
+        JNE     REGISTER_ERROR      ; if input other key, will go to Register_Error     
+                                    ; to display error message and JMP back here
+    ;-----------------------------------------------------------------------
+    REGISTER_ERROR:
+        MOV     AH,09H
+        LEA     DX,ErrorChoiceMessage
+        INT     21H
+        LEA     DX,NewLine
+        INT     21H
+        JMP     REGISTER
+    ;-----------------------------------------------------------------------
     STAFF_LOGIN:
         MOV     AH,09H              ; request display string
         LEA     DX,LoginMessage     ; ask user to input userName and password
         INT     21H
-
-        MOV     AH,09H
         LEA     DX,ChanceMessage_P1 ; display how many chance(s) message
         INT     21H
 
@@ -181,77 +205,10 @@ LOGIN PROC
             MOV     DL,"*"  ; to display the user input into * 
             INT     21H
             LOOP    GET_PASSWORD
+        JMP     CHECK_LOGIN
     ;-----------------------------------------------------------------------
-        MOV     SI,0    ;use for loop to checK the user name 
-        MOV     DI,0    ;use for loop to check the user password
-
-        CHK_NAME:
-            CMP     SI,5
-            JE      CHK_PSW
-            MOV     AL,CorrectUsername[SI]
-            CMP     AL,Username_ADATA[SI]
-            JE      NNAME
-            JNE     LOGIN_ERROR
-        NNAME:
-            INC     SI
-            JMP     CHK_NAME
-    ;-----------------------------------------------------------------------
-        CHK_PSW:
-            CMP     DI,10
-            JE      LOGIN_SUCCESSFUL
-            MOV     AL,CorrectPassword[DI]
-            CMP     AL,Password_ADATA[DI]
-            JE      NPSW
-            JNE     LOGIN_ERROR
-        NPSW:
-            INC     DI
-            JMP     CHK_PSW
-    ;-----------------------------------------------------------------------
-        LOGIN_ERROR:
-            DEC     LoginCount              ; login chance - 1
-            CMP     LoginCount,0
-            JE      EXIT_LOGIN
-
-            MOV     AH,09H
-            LEA     DX,InvalidMessage       ; display error message
-            INT     21H
-
-            MOV     AH,09H
-            LEA     DX,ChanceMessage_P1    ; display how many chances left
-            INT     21H
-
-            MOV     AH,02H
-            MOV     DL,LoginCount           ; DL=chances left 
-            ADD     DL,30H                  ; add 30H to display as "2" in ASCII code
-            INT     21H
-
-            MOV     AH,09H
-            LEA     DX,ChanceMessage_P2
-            INT     21H
-
-            JMP     LOGIN_AGAIN
-
-        EXIT_LOGIN:
-            MOV     AH,09H
-            LEA     DX,ExitProgramMessage
-            INT     21H
-            JMP     EXIT_PROGRAM
-    ;-----------------------------------------------------------------------
-    REGISTER:
-        MOV     AH,09H
-        LEA     DX,AskForRegister   ; display message to ask user want to register or not
-        INT     21H
-
-        MOV     AH,01H      ; user input 1=yes, 2=no
-        INT     21H         ; will store the input into AL
-
-        MOV     RegisterChoice,AL   ; move to RegisterChoice
-        CMP     RegisterChoice,'2'  ; compare the input =2 or not
-        JE      CHOICE_AGAIN        ; if yes, JMP to login page
-        CMP     RegisterChoice,'1'  ; if user key-in "1", after compare it will continue to the next step
-        JNE     REGISTER_ERROR      ; if input other key, will go to Register_Error
-                                    ; to display error message and JMP back here
-        ; ------- START TO REGISTER ------ ;
+    ; ------- START TO REGISTER ------ ;
+        START_REGISTER:
         MOV     AH,09H
         LEA     DX,SetUsernameMessage   ; display the message to let user input username
         INT     21H
@@ -276,7 +233,7 @@ LOGIN PROC
         GET_REGISTER_PASSWORD: 
             MOV     AH,07H
             INT     21H
-            MOV     RegisterPassword,AL[SI]
+            MOV     RegisterPassword[SI],AL
             INC     SI
             MOV     AH,02H
             MOV     DL,"*"
@@ -294,13 +251,47 @@ LOGIN PROC
         GET_CONFIRM_PASSWORD: 
             MOV     AH,07H
             INT     21H
-            MOV     ConfirmPassword,AL[SI]
+            MOV     ConfirmPassword[SI],AL
             INC     SI
             MOV     AH,02H
             MOV     DL,"*"
             INT     21H
             LOOP    GET_CONFIRM_PASSWORD
-;-----------------------------------------------------------------------
+        JMP     CHECK_REGISTER
+    ;-----------------------------------------------------------------------
+        CHECK_LOGIN:
+        MOV     SI,0    ;use for loop to checK the user name 
+        MOV     DI,0    ;use for loop to check the user password
+
+        CHK_NAME:
+            CMP     SI,5
+            JE      CHK_PSW
+            MOV     AL,CorrectUsername[SI]
+            CMP     AL,Username_ADATA[SI]
+            JE      NNAME
+            JNE     LOGIN_ERROR
+        NNAME:
+            INC     SI
+            JMP     CHK_NAME
+    ;-----------------------------------------------------------------------
+        CHK_PSW:
+            CMP     DI,10
+            JE      LOGIN_SUCCESSFUL        
+            MOV     AL,CorrectPassword[DI]
+            CMP     AL,Password_ADATA[DI]
+            JE      NPSW
+            JNE     LOGIN_ERROR
+        NPSW:
+            INC     DI
+            JMP     CHK_PSW
+    ;-----------------------------------------------------------------------
+    LOGIN_SUCCESSFUL:
+        MOV     AH,09H
+        LEA     DX,WelcomeMessage
+        INT     21H
+        RET
+    ;-----------------------------------------------------------------------
+        CHECK_REGISTER:
         MOV     DI,0    ;use for loop to check the password
         CHK_REGISTER_PSW:
             CMP     DI,10
@@ -312,7 +303,7 @@ LOGIN PROC
         NEXT_REGISTER_PSW:
             INC     DI
             JMP     CHK_REGISTER_PSW
-;-----------------------------------------------------------------------
+    ;-----------------------------------------------------------------------
         REGISTER_SUCCESSFUL: 
             MOV     AH,09H
             LEA     DX,RegisterConfirmMSG   ; display create successful message
@@ -347,15 +338,38 @@ LOGIN PROC
             INT     21H
 
             JMP     CONFIRM_AGAIN
+        ;-----------------------------------------------------------------------
+        LOGIN_ERROR:
+            DEC     LoginCount              ; login chance - 1
+            CMP     LoginCount,0
+            JE      EXIT_LOGIN
+
+            MOV     AH,09H
+            LEA     DX,InvalidMessage       ; display error message
+            INT     21H
+
+            MOV     AH,09H
+            LEA     DX,ChanceMessage_P1    ; display how many chances left
+            INT     21H
+
+            MOV     AH,02H
+            MOV     DL,LoginCount           ; DL=chances left 
+            ADD     DL,30H                  ; add 30H to display as "2" in ASCII code
+            INT     21H
+
+            MOV     AH,09H
+            LEA     DX,ChanceMessage_P2
+            INT     21H
+
+            JMP     LOGIN_AGAIN
+
+        EXIT_LOGIN:
+            MOV     AH,09H
+            LEA     DX,ExitProgramMessage
+            INT     21H
+            JMP     EXIT_PROGRAM
+
 ;-----------------------------------------------------------------------
-    REGISTER_ERROR:
-        MOV     AH,09H
-        LEA     DX,ErrorChoiceMessage
-        INT     21H
-        LEA     NewLine
-        INT     21H
-        JMP     REGISTER
-    
     EXIT_REGISTER:
         MOV     AH,09H
         LEA     DX,RegisterExitMSG  ; display fail to create new account message
@@ -368,7 +382,8 @@ LOGIN PROC
         MOV     CX,5
         MOV     SI,0
         CLEAR_REGISTER_NAME:
-            XOR     RegisterUsername[SI],RegisterUsername[SI]
+            MOV     AL,RegisterUsername[SI]
+            XOR     RegisterUsername[SI],AL
             INC     SI
             LOOP    CLEAR_REGISTER_NAME
         
@@ -376,7 +391,8 @@ LOGIN PROC
         MOV     CX,10
         MOV     SI,0
         CLEAR_REGISTER_PASSWORD:
-            XOR     RegisterPassword[SI],RegisterPassword[SI]
+            MOV     AL,RegisterPassword[SI]
+            XOR     RegisterPassword[SI],AL
             INC     SI
             LOOP    CLEAR_REGISTER_PASSWORD
         
@@ -384,7 +400,8 @@ LOGIN PROC
         MOV     CX,10
         MOV     SI,0
         CLEAR_CONFIRM_PASSWORD:
-            XOR     ConfirmPassword[SI],ConfirmPassword[SI]
+            MOV     AL,ConfirmPassword[SI]
+            XOR     ConfirmPassword[SI],AL
             INC     SI
             LOOP    CLEAR_CONFIRM_PASSWORD
 
@@ -661,5 +678,5 @@ FILE_ERROR:
     JMP MAIN_MENU                 ; Return to main menu
 
 
-END MAIN
+ END MAIN
 

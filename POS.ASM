@@ -59,7 +59,8 @@
  RegisterConfirmMSG DB  13,10,"Account Created! "
                     DB  13,10,"Will go back to login page. Please press any key to continue. "
                     DB  13,10,"$"
- RegisterErrorMSG   DB  13,10,"[ERROR] This 2 password are not same! Please try again. $"
+ RegisterCount      DB  0
+ RegisterErrorMSG   DB  13,10,"[ERROR] This 2 passwordS are not same! Want to try again? (Y/n): $"
  RegisterExitMSG    DB  13,10,"Account fail to create. "
                     DB  13,10,"Will go back to login page. Please press any key to continue. "
                     DB  13,10,"$"
@@ -257,9 +258,11 @@ LOGIN PROC
             MOV     DL,"*"
             INT     21H
             LOOP    GET_CONFIRM_PASSWORD
-        JMP     CHECK_REGISTER
+        JMP     CHECK_REGISTER_CORRECT_OR_NOT
     ;-----------------------------------------------------------------------
         CHECK_LOGIN:
+        CMP     RegisterCount,1         ; if user register new account (Register != 0)
+        JE      CHECK_LOGIN_REGISTER    ;  will jmp to other checking first
         MOV     SI,0    ;use for loop to checK the user name 
         MOV     DI,0    ;use for loop to check the user password
 
@@ -269,7 +272,7 @@ LOGIN PROC
             MOV     AL,CorrectUsername[SI]
             CMP     AL,Username_ADATA[SI]
             JE      NNAME
-            JNE     LOGIN_ERROR
+            JNE     LOGIN_ERROR     ; ERROR: Jmup out of range
         NNAME:
             INC     SI
             JMP     CHK_NAME
@@ -280,18 +283,12 @@ LOGIN PROC
             MOV     AL,CorrectPassword[DI]
             CMP     AL,Password_ADATA[DI]
             JE      NPSW
-            JNE     LOGIN_ERROR
+            JNE     LOGIN_ERROR     ; ERROR: Jmup out of range
         NPSW:
             INC     DI
             JMP     CHK_PSW
     ;-----------------------------------------------------------------------
-    LOGIN_SUCCESSFUL:
-        MOV     AH,09H
-        LEA     DX,WelcomeMessage
-        INT     21H
-        RET
-    ;-----------------------------------------------------------------------
-        CHECK_REGISTER:
+    CHECK_REGISTER_CORRECT_OR_NOT:
         MOV     DI,0    ;use for loop to check the password
         CHK_REGISTER_PSW:
             CMP     DI,10
@@ -304,72 +301,108 @@ LOGIN PROC
             INC     DI
             JMP     CHK_REGISTER_PSW
     ;-----------------------------------------------------------------------
-        REGISTER_SUCCESSFUL: 
-            MOV     AH,09H
-            LEA     DX,RegisterConfirmMSG   ; display create successful message
-            INT     21H
+    CHECK_LOGIN_REGISTER:
+        MOV     RegisterCount,0     ; turn off the register count
+        MOV     SI,0
+        MOV     DI,0
 
-            MOV     AH,01H      ; have a break to let user see about message, 
-            INT     21H         ; then user input any key will jump back to login screen
+        CHK_REGISTER_NAME:
+            CMP     SI,5
+            JE      CHK_REGISTER_PASSWORD
+            MOV     AL,RegisterUsername[SI]
+            CMP     AL,Username_ADATA[SI]
+            JE      NR_NAME
+            JNE     CHECK_LOGIN
+        NR_NAME:
+            INC     SI
+            JMP     CHK_REGISTER_NAME
+    ;-----------------------------------------------------------------------
+        CHK_REGISTER_PASSWORD:
+            CMP     DI,10
+            JE      LOGIN_SUCCESSFUL
+            MOV     AL,RegisterPassword[DI]
+            CMP     AL,Password_ADATA[DI]
+            JE      NR_PSW
+            JNE     CHECK_LOGIN     ; maybe same user name but different password
 
-            XOR     AL,AL       ; clear AL
-            JMP     JMP_TO_LOGIN_PAGE
+        NR_PSW:
+            INC     DI 
+            JMP     CHK_REGISTER_PASSWORD
 
-        REGISTER_NEWUSER_ERROR: 
-            DEC     ConfirmCount    ; confirm count (chance) - 1
-            CMP     ConfirmCount,0
-            JE      EXIT_REGISTER
+    ;-----------------------------------------------------------------------
+    REGISTER_SUCCESSFUL: 
+        MOV     AH,09H
+        LEA     DX,RegisterConfirmMSG   ; display create successful message
+        INT     21H
 
-            MOV     AH,09H
-            LEA     DX,RegisterErrorMSG ; display message then 2 password are not same
-            INT     21H
+        MOV     AH,01H      ; have a break to let user see about message, 
+        INT     21H         ; then user input any key will jump back to login screen
+        XOR     AL,AL       ; clear AL
+        MOV     RegisterCount,1 ; to turn on the register checking  
 
-            MOV     AH,09H
-            LEA     DX,ChanceMessage_P1 ; display how many chance left 
-            INT     21H
+        JMP     JMP_TO_LOGIN_PAGE
 
-            MOV     AH,02H
-            MOV     DL,ConfirmCount
-            ADD     DL,30H
-            INT     21H
+    ;-----------------------------------------------------------------------
+    LOGIN_SUCCESSFUL:
+        MOV     AH,09H
+        LEA     DX,WelcomeMessage
+        INT     21H
+        RET
+    ;-----------------------------------------------------------------------
+    REGISTER_NEWUSER_ERROR: 
+        DEC     ConfirmCount    ; confirm count (chance) - 1
+        CMP     ConfirmCount,0
+        JE      EXIT_REGISTER
 
-            MOV     AH,09H
-            LEA     DX,ChanceMessage_P2
-            INT     21H
+        MOV     AH,09H
+        LEA     DX,RegisterErrorMSG ; display message that 2 password are not same
+        INT     21H
 
-            JMP     CONFIRM_AGAIN
-        ;-----------------------------------------------------------------------
-        LOGIN_ERROR:
-            DEC     LoginCount              ; login chance - 1
-            CMP     LoginCount,0
-            JE      EXIT_LOGIN
+        MOV     AH,09H
+        LEA     DX,ChanceMessage_P1 ; display how many chance left 
+        INT     21H
 
-            MOV     AH,09H
-            LEA     DX,InvalidMessage       ; display error message
-            INT     21H
+        MOV     AH,02H
+        MOV     DL,ConfirmCount
+        ADD     DL,30H
+        INT     21H
 
-            MOV     AH,09H
-            LEA     DX,ChanceMessage_P1    ; display how many chances left
-            INT     21H
+        MOV     AH,09H
+        LEA     DX,ChanceMessage_P2
+        INT     21H
 
-            MOV     AH,02H
-            MOV     DL,LoginCount           ; DL=chances left 
-            ADD     DL,30H                  ; add 30H to display as "2" in ASCII code
-            INT     21H
+        JMP     CONFIRM_AGAIN
+    ;-----------------------------------------------------------------------
+    LOGIN_ERROR:
+        DEC     LoginCount              ; login chance - 1
+        CMP     LoginCount,0
+        JE      EXIT_LOGIN
 
-            MOV     AH,09H
-            LEA     DX,ChanceMessage_P2
-            INT     21H
+        MOV     AH,09H
+        LEA     DX,InvalidMessage       ; display error message
+        INT     21H
 
-            JMP     LOGIN_AGAIN
+        MOV     AH,09H
+        LEA     DX,ChanceMessage_P1    ; display how many chances left
+        INT     21H
 
-        EXIT_LOGIN:
-            MOV     AH,09H
-            LEA     DX,ExitProgramMessage
-            INT     21H
-            JMP     EXIT_PROGRAM
+        MOV     AH,02H
+        MOV     DL,LoginCount           ; DL=chances left 
+        ADD     DL,30H                  ; add 30H to display as "2" in ASCII code
+        INT     21H
 
-;-----------------------------------------------------------------------
+        MOV     AH,09H
+        LEA     DX,ChanceMessage_P2
+        INT     21H
+
+        JMP     LOGIN_AGAIN
+
+    EXIT_LOGIN:
+        MOV     AH,09H
+        LEA     DX,ExitProgramMessage
+        INT     21H
+        JMP     EXIT_PROGRAM
+    ;-----------------------------------------------------------------------
     EXIT_REGISTER:
         MOV     AH,09H
         LEA     DX,RegisterExitMSG  ; display fail to create new account message

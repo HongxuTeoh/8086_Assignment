@@ -26,7 +26,7 @@
 
     SelectPrompt DB 13,10,'Select product number to edit (1-4): $'
     ProductBuffer DB 100 DUP(0)       ; Buffer to store product data
-    InputBuffer DB 5, 0, 5 DUP(0)     ; Input buffer: max 3 digits + Enter key
+    
     EnterNewPricePrompt DB 13,10,'Enter new price (up to 3 digits): $'
     ErrorMsg DB 13,10,'Error opening or writing file!$', 0
 
@@ -41,7 +41,12 @@
     CashPrompt DB 13,10,'Enter cash amount: $'
     ChangeMsg DB 13,10,'Change: $'
     InsufficientCashMsg DB 13,10,'[ERROR] Insufficient cash! Please try again. $'
+    InvalidValueMsg DB 13,10,"[ERROR] Invalid Value! Please enter integer number 0~9. $"
 
+    NUMBER_MAX_65535_INPUT_ARRAY    LABEL   BYTE
+    NUMBER_MAX_65535_INPUT_MAX      DB      6
+    NUMBER_MAX_65535_INPUT_ACT      DB      ?
+    NUMBER_MAX_65535_INPUT_ADATA    DB      6 DUP (?)
 ;----------coupon-------------------;
 CouponFile DB 'coupon.txt', 0   ; Filename for the coupon file
 CouponBuffer DB 3 DUP(0)        ; Buffer to hold 3 characters from the file
@@ -619,7 +624,11 @@ EndPurchaseConditionally ENDP
 CheckContinueCondition PROC
     CMP AL, 'Y'
     CALL ContinuePurchaseConditionally
+    CMP AL, 'y'
+    CALL ContinuePurchaseConditionally
     CMP AL, 'N'
+    CALL InvalidConditionally
+    CMP AL, 'n'
     CALL InvalidConditionally
     RET
 CheckContinueCondition ENDP
@@ -632,6 +641,8 @@ InvalidConditionally ENDP
 
 CheckCouponCondition PROC
     CMP AL, 'Y'
+    CALL ApplyCouponConditionally
+    CMP AL, 'y'
     CALL ApplyCouponConditionally
     RET
 CheckCouponCondition ENDP
@@ -784,73 +795,73 @@ ADD_COUPON ENDP
 
 Payment PROC
     ; Prompt for cash input
-    MOV DX, OFFSET CashPrompt
     MOV AH, 09H
+    LEA DX, CashPrompt
     INT 21h
 
     ; Get cash input from user
     GetCashInput:
-        MOV AH, 0AH                ; Buffered input for cash (in decimal)
-        MOV DX, OFFSET InputBuffer  ; Buffer to store input
-        INT 21h
+        MOV     AH, 0AH
+        LEA     DX, NUMBER_MAX_65535_INPUT_ARRAY
+        INT     21H
 
         ; Convert ASCII input to a number (AX = cash amount)
-        XOR CX, CX                  ; Clear CX (will hold the cash input value)
-        MOV SI, OFFSET InputBuffer + 2 ; Start after length byte
-        XOR BX, BX                  ; Clear BX (for calculation)
+        XOR     CX, CX
+        MOV     CL, NUMBER_MAX_65535_INPUT_MAX
+        MOV     SI, 0 ; Also the number of digits in the string
 
-    ReadCashDigit:
-        MOV AL, [SI]            ; Load character
-        CMP AL, 0DH             ; Check for Enter key (Carriage Return)
-        JE CalculateChange      ; If Enter, process the input
-        CMP AL, 30H             ; Check if character is below '0'
-        JB InvalidInput         ; If below '0', jump to error handling
-        CMP AL, 39H             ; Check if character is above '9'
-        JA InvalidInput         ; If above '9', jump to error handling
-
-        SUB AL, 30H             ; Convert ASCII to digit
-        MOV AH, 0               ; Clear AH
-        MOV BX, 10              ; Base 10 multiplication
-        MUL BX                  ; AX = AL * 10
-        ADD CX, AX              ; Accumulate the result in CX (cash input)
-        INC SI                  ; Move to next character
-        JMP ReadCashDigit       ; Continue reading input
+    FIND_NUMBER_MAX_65535_INPUT_EOS:
+        CMP     NUMBER_MAX_65535_INPUT_ADATA[SI], 0DH ; ENTER key
+        JE      FOUND_NUMBER_MAX_65535_INPUT_EOS
+        CMP     NUMBER_MAX_65535_INPUT_ADATA[SI], 30H
+        JB      NUMBER_MAX_65535_NON_DIGIT_INPUT_FOUND
+        CMP     NUMBER_MAX_65535_INPUT_ADATA[SI], 39H
+        JA      NUMBER_MAX_65535_NON_DIGIT_INPUT_FOUND
+        INC     SI
+        LOOP    FIND_NUMBER_MAX_65535_INPUT_EOS
     
-    InvalidInput:
-        ; Display an error message for invalid input
-        MOV DX, OFFSET InvalidMsg
-        MOV AH, 9
-        INT 21h
-        ; Prompt the user again for cash input
-        JMP GetCashInput
+    NUMBER_MAX_65535_NON_DIGIT_INPUT_FOUND:
+        MOV     AH, 09H
+        LEA     DX, InvalidValueMsg
+        INT     21H
+        LEA     DX, CashPrompt
+        INT     21H
+        JMP     GetCashInput
+    FOUND_NUMBER_MAX_65535_INPUT_EOS:
+        CMP     SI, 0
+        JE      NUMBER_MAX_65535_NON_DIGIT_INPUT_FOUND ; Reject empty input
+        ; AX = Original character, Multiplication result
+        MOV     BX, 1 ; Current magnitude of 10 (1, 10, 100)
+        MOV     CX, 0 ; Sum
 
+    NUMBER_MAX_65535_CONVERT_TO_BYTE_LOOP:
+        DEC     SI
+        XOR     AX, AX
+        MOV     AL, NUMBER_MAX_65535_INPUT_ADATA[SI]
+        SUB     AL, 30H
+        MUL     BX
+        ADD     CX, AX ; DX should be 0
+        JC      NUMBER_MAX_65535_LIMIT_EXCEEDED ; If carry bit, > 65535
+        
+        MOV     AX, BX
+        XOR     BX, BX
+        MOV     BL, 10
+        MUL     BL
+        MOV     BX, AX
+        CMP     SI, 0
+        JNE     NUMBER_MAX_65535_CONVERT_TO_BYTE_LOOP
+
+    MOV     DX, CX
+    JMP     CalculateChange
+
+    NUMBER_MAX_65535_LIMIT_EXCEEDED:
+        MOV     AH, 09H
+        LEA     DX, NUMBER_MAX_65535_LIMIT_EXCEEDED_RETRY_PROMPT
+        INT     21H
+        JMP     GetCashInput
+    
     CalculateChange:
-    MOV AX, CX                  ; AX = Cash amount from user
-    MOV BX, [Total]             ; BX = Total after discount
-
-    CMP AX, BX                  ; Compare cash amount with total price
-    JB InsufficientCash         ; If cash is less than total, show an error
-
-    ; Cash is sufficient, calculate change
-    SUB AX, BX                  ; AX = Cash - Total (the change)
-    
-    ; Display change to the user
-    MOV DX, OFFSET ChangeMsg    ; Load the "Change: " message
-    MOV AH, 9
-    INT 21h
-    CALL DisplayNumber          ; Display the change amount
-    MOV DL, '$'
-    MOV AH, 2
-    INT 21h
-    RET                         ; End of Payment procedure
-
-InsufficientCash:
-    ; Display insufficient cash error
-    MOV DX, OFFSET InsufficientCashMsg
-    MOV AH, 9
-    INT 21h
-    JMP Payment                 ; Retry payment if cash is insufficient
-
+        MOV     BX,[Total]
 Payment ENDP
     
 

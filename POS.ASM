@@ -41,6 +41,9 @@
     ChangeMsg DB 13,10,'Change: $'
     InsufficientCashMsg DB 13,10,'[ERROR] Insufficient cash! Please try again. $'
     InvalidValueMsg DB 13,10,"[ERROR] Invalid Value! Please enter integer number 0~9. $"
+    InsufficientFundsMsg DB 13,10,"[ERROR] Not enough to paid! Please try again. $"
+    WANT_TO_CONTINUE    DB  13,10,"Do you want to continue? "
+                        DB  13,10,"(Y = yes / N = no): $"
 
     NUMBER_MAX_65535_INPUT_ARRAY    LABEL   BYTE
     NUMBER_MAX_65535_INPUT_MAX      DB      6
@@ -850,13 +853,13 @@ ADD_COUPON ENDP
 
 
 Payment PROC
-    ; Prompt for cash input
-    MOV AH, 09H
-    LEA DX, CashPrompt
-    INT 21h
+    GetCashInput:
+        ; Prompt for cash input
+        MOV AH, 09H
+        LEA DX, CashPrompt
+        INT 21h
 
     ; Get cash input from user
-    GetCashInput:
         MOV     AH, 0AH
         LEA     DX, NUMBER_MAX_65535_INPUT_ARRAY
         INT     21H
@@ -879,8 +882,6 @@ Payment PROC
     NUMBER_MAX_65535_NON_DIGIT_INPUT_FOUND:
         MOV     AH, 09H
         LEA     DX, InvalidValueMsg
-        INT     21H
-        LEA     DX, CashPrompt
         INT     21H
         JMP     GetCashInput
     FOUND_NUMBER_MAX_65535_INPUT_EOS:
@@ -917,13 +918,48 @@ Payment PROC
         JMP     GetCashInput
     
     CalculateChange:
-        MOV     BX,[Total]
-        CMP     DX,BX
+        CMP     DX,[Total]
         JB      NOT_ENOUGH_TO_PAID
 
-        SUB     DX,BX
-        
-        
+        SUB     DX,[Total]
+        XOR     AX,AX
+        MOV     AX,DX
+
+        MOV     AH,09H
+        LEA     DX,ChangeMsg
+        INT     21H
+        CALL    DisplayNumber
+
+        JMP PaymentDone   ; Proceed to end of payment
+
+    NOT_ENOUGH_TO_PAID:
+        MOV AH, 09H
+        LEA DX, InsufficientFundsMsg
+        INT 21H
+        JMP GetCashInput  ; Ask for cash input again
+
+    PaymentDone:
+        MOV     AH,09H
+        LEA     DX,WANT_TO_CONTINUE
+        INT     21H
+
+        MOV     AH,01H
+        INT     21H
+        CMP     AL,"Y"
+        JE      RETURN_BACK
+        CMP     AL,"y"
+        JE      RETURN_BACK
+        CMP     AL,"N"
+        JE      LOG_OUT
+        CMP     AL,"n"
+        JE      LOG_OUT
+        JNE     PaymentDone
+
+        RETURN_BACK:
+            CALL MAIN_MENU
+        LOG_OUT:
+            CALL EXIT_LOGIN
+
 Payment ENDP
     
 

@@ -37,6 +37,12 @@
 
 ; ------ Purchase  ------ ;
 
+; ---------Payment --------;
+    CashPrompt DB 'Enter cash amount: $'
+    ChangeMsg DB 'Change: $'
+    InsufficientCashMsg DB '[ERROR] Insufficient cash! Please try again.$'
+    InputBuffer DB 5, 0, 5 DUP(0)  ; Input buffer: max 5 digits + Enter key
+
 ; ------ LOGIN  ------ ;
  Divider            DB  79 DUP ("="),"$"
  NewLine            DB  13,10,"$"
@@ -530,34 +536,41 @@ Purchase PROC
     LEA DX, NewLine
     INT 21H
 
-    ; Get item choice
+        ; Get item choice (AL will hold the user's item choice)
     MOV AH, 1
     INT 21h
     SUB AL, '0'
     CALL InvalidCondition        ; Check if item choice is valid
 
+    ; If the user selected option 5, exit purchase
     CMP AL, 5
     CALL EndPurchaseConditionally
 
-    ; Get quantity
+    ; At this point, AL contains the item choice (1-4).
+    ; Calculate the correct index for the price array.
+    
+    XOR AH, AH            ; Clear AH to ensure AX is clean
+    MOV BX, AX            ; Move item choice (in AL, now zero-based index) to BX
+    DEC BX                ; Convert to zero-based index for the price array
+    SHL BX, 1             ; Multiply by 2 because each price is stored as a word (2 bytes)
+                          ; BX now contains the index to access the correct price
+
+    ; Get quantity of the item
     MOV DX, OFFSET QuantityPrompt
     MOV AH, 9
     INT 21h
 
     MOV AH, 1
     INT 21h
-    SUB AL, '0'
+    SUB AL, '0'           ; Convert ASCII to numeric
+    XOR AH, AH            ; Ensure AX holds the quantity, clearing AH to avoid issues with larger numbers
 
-    ; Calculate subtotal
-    XOR AH, AH
-    PUSH AX  ; Save quantity
-    MOV BX, AX
-    DEC BX
-    SHL BX, 1  ; BX = (choice - 1) * 2
-    MOV AX, Prices[BX]
-    POP BX  ; Retrieve quantity
-    MUL BX
-    ADD [Subtotal], AX  ; Use memory operand
+    ; Retrieve price for the selected item and calculate subtotal
+    MOV CX, Prices[BX]    ; Move the price of the selected item into CX
+    MUL CX                ; Multiply quantity (in AX) by the price (in CX)
+                          ; AX now holds the result of price * quantity
+                          
+    ADD [Subtotal], AX     ; Add the result to the running subtotal
 
     ; Display current subtotal
     MOV DX, OFFSET SubtotalMsg
@@ -665,6 +678,7 @@ FILE_ERROR:
 ;----------------------------------------------------------------------- add coupon subroutine
 ADD_COUPON PROC
 ; Coupon application
+RET                          ; Return back to the main menu
 ADD_COUPON ENDP
 ApplyCoupon PROC
     MOV AX, [Total]
@@ -683,9 +697,67 @@ ApplyCoupon PROC
     MOV DL, '$'
     MOV AH, 2
     INT 21h
-    CALL DisplayTotal            ; After applying coupon, display total
+    CALL Payment            ; After applying coupon, display total
 ApplyCoupon ENDP
-    RET                          ; Return back to the main menu
+
+Payment PROC
+    ; Prompt for cash input
+    MOV DX, OFFSET CashPrompt
+    MOV AH, 9
+    INT 21h
+
+    ; Get cash input from user
+    MOV AH, 0AH                ; Buffered input for cash (in decimal)
+    MOV DX, OFFSET InputBuffer  ; Buffer to store input
+    INT 21h
+
+    ; Convert ASCII input to a number (AX = cash amount)
+    XOR CX, CX                  ; Clear CX (will hold the cash input value)
+    MOV SI, OFFSET InputBuffer + 2 ; Start after length byte
+    XOR BX, BX                  ; Clear BX (for calculation)
+
+    ReadCashDigit:
+        MOV AL, [SI]            ; Load character
+        CMP AL, 0DH             ; Check for Enter key (Carriage Return)
+        JE CalculateChange      ; If Enter, process the input
+
+        SUB AL, '0'             ; Convert ASCII to digit
+        MOV AH, 0               ; Clear AH
+        MOV BX, 10              ; Base 10 multiplication
+        MUL BX                  ; AX = AL * 10
+        ADD CX, AX              ; Accumulate the result in CX (cash input)
+        INC SI                  ; Move to next character
+        JMP ReadCashDigit       ; Continue reading input
+
+    CalculateChange:
+    MOV AX, CX                  ; AX = Cash amount from user
+    MOV BX, [Total]             ; BX = Total after discount
+
+    CMP AX, BX                  ; Compare cash amount with total price
+    JB InsufficientCash         ; If cash is less than total, show an error
+
+    ; Cash is sufficient, calculate change
+    SUB AX, BX                  ; AX = Cash - Total (the change)
+    
+    ; Display change to the user
+    MOV DX, OFFSET ChangeMsg    ; Load the "Change: " message
+    MOV AH, 9
+    INT 21h
+    CALL DisplayNumber          ; Display the change amount
+    MOV DL, '$'
+    MOV AH, 2
+    INT 21h
+    RET                         ; End of Payment procedure
+
+InsufficientCash:
+    ; Display insufficient cash error
+    MOV DX, OFFSET InsufficientCashMsg
+    MOV AH, 9
+    INT 21h
+    JMP Payment                 ; Retry payment if cash is insufficient
+
+Payment ENDP
+    
 
 ;----------------------------------------------------------------------- add coupon subroutine
 ;----------------------------------------------------------------------- logout subroutine

@@ -40,7 +40,7 @@
 ; ---------Payment --------;
     CashPrompt DB 13,10,'Enter cash amount: $'
     ChangeMsg DB 13,10,'Change: $'
-    InsufficientCashMsg DB 13,10,'[ERROR] Insufficient cash! Please try again.$'
+    InsufficientCashMsg DB 13,10,'[ERROR] Insufficient cash! Please try again. $'
 
 ;----------coupon-------------------;
 CouponFile DB 'coupon.txt', 0   ; Filename for the coupon file
@@ -785,31 +785,44 @@ ADD_COUPON ENDP
 Payment PROC
     ; Prompt for cash input
     MOV DX, OFFSET CashPrompt
-    MOV AH, 9
+    MOV AH, 09H
     INT 21h
 
     ; Get cash input from user
-    MOV AH, 0AH                ; Buffered input for cash (in decimal)
-    MOV DX, OFFSET InputBuffer  ; Buffer to store input
-    INT 21h
+    GetCashInput:
+        MOV AH, 0AH                ; Buffered input for cash (in decimal)
+        MOV DX, OFFSET InputBuffer  ; Buffer to store input
+        INT 21h
 
-    ; Convert ASCII input to a number (AX = cash amount)
-    XOR CX, CX                  ; Clear CX (will hold the cash input value)
-    MOV SI, OFFSET InputBuffer + 2 ; Start after length byte
-    XOR BX, BX                  ; Clear BX (for calculation)
+        ; Convert ASCII input to a number (AX = cash amount)
+        XOR CX, CX                  ; Clear CX (will hold the cash input value)
+        MOV SI, OFFSET InputBuffer + 2 ; Start after length byte
+        XOR BX, BX                  ; Clear BX (for calculation)
 
     ReadCashDigit:
         MOV AL, [SI]            ; Load character
         CMP AL, 0DH             ; Check for Enter key (Carriage Return)
         JE CalculateChange      ; If Enter, process the input
+        CMP AL, 30H             ; Check if character is below '0'
+        JB InvalidInput         ; If below '0', jump to error handling
+        CMP AL, 39H             ; Check if character is above '9'
+        JA InvalidInput         ; If above '9', jump to error handling
 
-        SUB AL, '0'             ; Convert ASCII to digit
+        SUB AL, 30H             ; Convert ASCII to digit
         MOV AH, 0               ; Clear AH
         MOV BX, 10              ; Base 10 multiplication
         MUL BX                  ; AX = AL * 10
         ADD CX, AX              ; Accumulate the result in CX (cash input)
         INC SI                  ; Move to next character
         JMP ReadCashDigit       ; Continue reading input
+    
+    InvalidInput:
+        ; Display an error message for invalid input
+        MOV DX, OFFSET InvalidMsg
+        MOV AH, 9
+        INT 21h
+        ; Prompt the user again for cash input
+        JMP GetCashInput
 
     CalculateChange:
     MOV AX, CX                  ; AX = Cash amount from user

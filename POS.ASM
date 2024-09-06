@@ -918,6 +918,12 @@ Payment PROC
     
     CalculateChange:
         MOV     BX,[Total]
+        CMP     DX,BX
+        JB      NOT_ENOUGH_TO_PAID
+
+        SUB     DX,BX
+        
+        
 Payment ENDP
     
 

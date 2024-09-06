@@ -43,7 +43,7 @@
  ChanceMessage_P2   DB  " more chance(s). $"
  LoginCount         DB  3
 
- AskForRegister     DB  13,10,"Do you want to register as a staff? "
+ AskForRegister     DB  13,10,13,10,"Do you want to register as a staff? "
                     DB  13,10,"1 - Yes "
                     DB  13,10,"2 - No"
                     DB  13,10,"Please choose (1 or 2): $"
@@ -60,7 +60,7 @@
                     DB  13,10,"Will go back to login page. Please press any key to continue. "
                     DB  13,10,"$"
  RegisterCount      DB  0
- RegisterErrorMSG   DB  13,10,"[ERROR] This 2 passwordS are not same! Want to try again? (Y/n): $"
+ RegisterErrorMSG   DB  13,10,"[ERROR] This 2 passwords are not same! Please try again. $"
  RegisterExitMSG    DB  13,10,"Account fail to create. "
                     DB  13,10,"Will go back to login page. Please press any key to continue. "
                     DB  13,10,"$"
@@ -74,14 +74,17 @@
 
  ExitProgramMessage DB  13,10,"Exiting Program. Goodbye. $"
   
-; ------ END OF DATA DEFINITION ------
+; ------ END OF DATA DEFINITION ------ ;
 .CODE
 MAIN PROC
     MOV AX,@DATA
     MOV DS,AX
     ; ------ START OF CODE ------ ;
-
     CALL LOGIN      ; call the LOGIN program (done)
+    MOV     AH,09H
+    LEA     DX,WelcomeMessage
+    INT     21H
+
 
     CALL MAIN_MENU  ; Call the MAIN_MENU procedure
     ; Further processing can be done here after returning from MAIN_MENU
@@ -164,7 +167,7 @@ LOGIN PROC
 
         MOV     AH,02H
         MOV     DL,LoginCount
-        MOV     AL,30H
+        ADD     DL,30H
         INT     21H
 
         MOV     AH,09H
@@ -316,19 +319,18 @@ LOGIN PROC
         NR_NAME:
             INC     SI
             JMP     CHK_REGISTER_NAME
-    ;-----------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         CHK_REGISTER_PASSWORD:
             CMP     DI,10
             JE      LOGIN_SUCCESSFUL
             MOV     AL,RegisterPassword[DI]
             CMP     AL,Password_ADATA[DI]
             JE      NR_PSW
-            JNE     CHECK_LOGIN     ; maybe same user name but different password
+            JNE     CHECK_LOGIN     ; may be same user name but different password
 
         NR_PSW:
             INC     DI 
             JMP     CHK_REGISTER_PASSWORD
-
     ;-----------------------------------------------------------------------
     REGISTER_SUCCESSFUL: 
         MOV     AH,09H
@@ -337,17 +339,34 @@ LOGIN PROC
 
         MOV     AH,01H      ; have a break to let user see about message, 
         INT     21H         ; then user input any key will jump back to login screen
-        XOR     AL,AL       ; clear AL
         MOV     RegisterCount,1 ; to turn on the register checking  
 
         JMP     JMP_TO_LOGIN_PAGE
-
     ;-----------------------------------------------------------------------
     LOGIN_SUCCESSFUL:
-        MOV     AH,09H
-        LEA     DX,WelcomeMessage
-        INT     21H
         RET
+    ;-----------------------------------------------------------------------
+        LOGIN_ERROR:
+        DEC     LoginCount              ; login chance - 1
+        CMP     LoginCount,0
+        JE      EXIT_LOGIN
+
+        MOV     AH,09H
+        LEA     DX,InvalidMessage       ; display error message
+        INT     21H
+        LEA     DX,ChanceMessage_P1    ; display how many chances left
+        INT     21H
+
+        MOV     AH,02H
+        MOV     DL,LoginCount           ; DL=chances left 
+        ADD     DL,30H                  ; add 30H to display as "2" in ASCII code
+        INT     21H
+
+        MOV     AH,09H
+        LEA     DX,ChanceMessage_P2
+        INT     21H
+
+        JMP     LOGIN_AGAIN
     ;-----------------------------------------------------------------------
     REGISTER_NEWUSER_ERROR: 
         DEC     ConfirmCount    ; confirm count (chance) - 1
@@ -373,29 +392,6 @@ LOGIN PROC
 
         JMP     CONFIRM_AGAIN
     ;-----------------------------------------------------------------------
-    LOGIN_ERROR:
-        DEC     LoginCount              ; login chance - 1
-        CMP     LoginCount,0
-        JE      EXIT_LOGIN
-
-        MOV     AH,09H
-        LEA     DX,InvalidMessage       ; display error message
-        INT     21H
-
-        MOV     AH,09H
-        LEA     DX,ChanceMessage_P1    ; display how many chances left
-        INT     21H
-
-        MOV     AH,02H
-        MOV     DL,LoginCount           ; DL=chances left 
-        ADD     DL,30H                  ; add 30H to display as "2" in ASCII code
-        INT     21H
-
-        MOV     AH,09H
-        LEA     DX,ChanceMessage_P2
-        INT     21H
-
-        JMP     LOGIN_AGAIN
 
     EXIT_LOGIN:
         MOV     AH,09H
@@ -441,6 +437,7 @@ LOGIN PROC
         JMP     JMP_TO_LOGIN_PAGE
 
     JMP_TO_LOGIN_PAGE:
+        XOR     AL,AL       ; clear AL
         MOV     AX,3    ; clear screen
         INT     10H     ; call interrupt service
         

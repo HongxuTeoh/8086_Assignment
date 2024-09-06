@@ -22,11 +22,10 @@
     DiscountMsg DB 13,10,'After Discount, Total: $'
     TotalMsg DB 13,10,'Total: $'
     InvalidMsg DB 13,10,'Invalid choice!$'
-    FileName DB 'product.txt', 0
+    
 
     SelectPrompt DB 13,10,'Select product number to edit (1-4): $'
-    ProductBuffer DB 100 DUP(0)       ; Buffer to store product data
-    
+    InputBuffer DB 5, 0, 5 DUP(0)     ; Input buffer: max 3 digits + Enter key
     EnterNewPricePrompt DB 13,10,'Enter new price (up to 3 digits): $'
     ErrorMsg DB 13,10,'Error opening or writing file!$', 0
 
@@ -48,10 +47,23 @@
     NUMBER_MAX_65535_INPUT_ACT      DB      ?
     NUMBER_MAX_65535_INPUT_ADATA    DB      6 DUP (?)
 ;----------coupon-------------------;
-CouponFile DB 'coupon.txt', 0   ; Filename for the coupon file
+
+FileName DB 'coupon.txt', 0
 CouponBuffer DB 3 DUP(0)        ; Buffer to hold 3 characters from the file
 CouponAppliedMsg DB 13,10,'Coupon applied: $', 0
-ErrorMsgC DB 13,10,'Error accessing coupon file!$', 0
+ErrorMsgC DB 'Error opening file! Error code: $'
+ErrorCode DW 0 
+NoCouponMsg DB 13,10,'No more coupon!$', 0
+CouponAmountPrompt DB 13,10,'Input coupon:$', 0
+FileHandle DW ?  ; Add this to your data section
+NewLineC DB 13, 10, '$'
+AttemptOpenMsg DB 'Attempting to open file...', 13, 10, '$'
+OpenSuccessMsg DB 'File opened successfully!', 13, 10, '$'
+OpenErrorMsg DB 'Error opening file! Error code: $'
+ReadErrorMsg DB 'Error reading file! Error code: $'
+CouponCountMsg DB 'Current coupon count: $'
+
+ProductBuffer DB 3 DUP(?)
 
 ; ------ LOGIN  ------ ;
  Divider            DB  79 DUP ("="),"$"
@@ -732,58 +744,108 @@ InvalidCondition ENDP
 
 ;----------------------------------------------------------------------- add coupon subroutine
 ADD_COUPON PROC 
-    ; Step 1: Open the coupon file
-    MOV AH, 3DH                ; DOS function: Open file
-    MOV AL, 0                  ; Open file in read-only mode
-    MOV DX, OFFSET CouponFile   ; Filename of the coupon text file
-    INT 21H                    ; DOS interrupt
-    JC FILE_ERRORC              ; Jump if an error occurs opening the file
-    MOV BX, AX                 ; BX holds the file handle
-
-    ; Step 2: Read the coupon value (up to 3 digits)
-    MOV AH, 3FH                ; DOS function: Read from file
-    MOV CX, 3                  ; Read 3 bytes (3-digit coupon value)
-    MOV DX, OFFSET CouponBuffer ; Buffer to store coupon value
-    INT 21H                    ; DOS interrupt
-    JC FILE_ERRORC              ; Jump if an error occurs reading the file
-
-    ; Step 3: Convert ASCII input to a number (coupon value)
-    XOR CX, CX                 ; Clear CX (will hold the coupon value)
-    MOV SI, OFFSET CouponBuffer ; Start at the first byte of the coupon buffer
-    XOR BX, BX                 ; Clear BX (used for calculation)
-
-ConvertCoupon:
-    MOV AL, [SI]               ; Load a character from the coupon buffer
-    CMP AL, 0DH                ; Check for the end of input (Enter key or end of file)
-    JE CouponProcess           ; If Enter key or end of file, jump to process the coupon
-    SUB AL, '0'                ; Convert ASCII to a digit
-    MOV AH, 0
-    MOV BX, 10
-    MUL BX                     ; Multiply existing value by 10
-    ADD CX, AX                 ; Add the new digit to CX
-    INC SI                     ; Move to the next character
-    JMP ConvertCoupon
-
-CouponProcess:
-    ; Now CX holds the coupon value, proceed to apply the coupon
-    ; You can add logic here to check if the coupon is valid, etc.
-
-    ; Display the coupon value (optional, for debugging)
-    MOV DX, OFFSET CouponAppliedMsg
-    MOV AH, 9
+    ; Display attempting to open file message
+    MOV AH, 09H
+    MOV DX, OFFSET AttemptOpenMsg
     INT 21H
-    MOV AX, CX                 ; AX holds the coupon value
-    CALL DisplayNumber         ; Display the coupon value
 
-    ; Process the coupon further (e.g., apply discount or validate)
-    ; In this simple version, we are just displaying the coupon value.
+    ; Clear registers before opening the file
+    XOR AX, AX
+    XOR BX, BX
+    XOR CX, CX
+    XOR DX, DX
 
-    ; Step 4: Close the file
-    MOV AH, 3EH                ; DOS function: Close file
-    MOV BX, AX                 ; BX holds the file handle
-    INT 21H                    ; DOS interrupt
+    ; Open coupon.txt file for reading and writing
+    MOV AH, 3DH           ; DOS function: Open file
+    MOV AL, 2             ; Open for read/write access
+    MOV DX, OFFSET FileName ; File name: 'coupon.txt'
+    INT 21H               ; DOS interrupt to open the file
+    JC FILE_OPEN_ERROR    ; Jump to error handling if file fails to open
+    MOV [FileHandle], AX  ; Save file handle
 
-    RET                        ; Return to main menu                      ; Return back to the main menu
+    ; Display file opened successfully message
+    MOV AH, 09H
+    MOV DX, OFFSET OpenSuccessMsg
+    INT 21H
+
+    ; Clear registers before reading the file
+    XOR AX, AX
+    XOR BX, BX
+    XOR CX, CX
+    XOR DX, DX
+
+    MOV AH, 42H           ; DOS function to move file pointer
+    MOV AL, 0             ; Move pointer to beginning of file
+    MOV BX, [FileHandle]  ; File handle
+    XOR CX, CX            ; High word of offset (0 for beginning)
+    XOR DX, DX            ; Low word of offset (0 for beginning)
+    INT 21H               ; DOS interrupt
+
+    ; Read current coupon count from file
+    MOV AH, 3FH           ; DOS function: Read file
+    MOV BX, [FileHandle]  ; File handle
+    MOV CX, 3             ; We expect a 3-digit coupon count (up to 999)
+    MOV DX, OFFSET ProductBuffer ; Buffer to store file data
+    INT 21H               ; DOS interrupt to read file
+    JC FILE_ERROR_CALL         ; Jump to error handling if reading fails
+    FILE_ERROR_CALL:
+    CALL FILE_ERROR
+    ; Convert ASCII coupon count to a number
+    MOV SI, OFFSET ProductBuffer ; Point to buffer holding coupon count
+    XOR BX, BX            ; Clear BX to accumulate the coupon count value
+
+ReadCouponCount:
+    MOV AL, [SI]          ; Load the digit from buffer
+    CMP AL, 0             ; Check for end of buffer (null byte)
+    JE DisplayCoupon      ; If end, go to display the coupon count
+    SUB AL, '0'           ; Convert ASCII to numeric (e.g., '1' -> 1)
+    MOV AH, 0
+    MOV CX, 10            ; Prepare to multiply by 10 for base-10 conversion
+    MUL CX                ; Multiply AX by 10
+    ADD BX, AX            ; Accumulate the value in BX
+    INC SI                ; Move to the next character
+    JMP ReadCouponCount
+
+DisplayCoupon:
+    ; Clear AX, BX, CX, DX before displaying
+    XOR AX, AX
+    XOR BX, BX
+    XOR CX, CX
+    XOR DX, DX
+
+    ; Move coupon count from BX to DX for display
+    MOV DX, BX            ; Store the coupon count in DX
+
+    ; Display the coupon count
+    MOV AX, DX            ; Move the coupon count into AX for display
+    CALL DisplayNumber    ; Call DisplayNumber to print the coupon count
+
+    ; Close the file
+    MOV AH, 3EH           ; DOS function: Close file
+    MOV BX, [FileHandle]  ; File handle
+    INT 21H               ; Close file
+
+    RET                   ; Return back to the main menu
+
+FILE_OPEN_ERROR:
+    ; Save error code
+    MOV [WORD PTR ErrorCode], AX    ; Specify that ErrorCode is 16-bit
+
+    ; Display error message
+    MOV AH, 09H           ; DOS function: Print string
+    MOV DX, OFFSET ErrorMsg
+    INT 21H
+
+    ; Display error code
+    MOV AX, [WORD PTR ErrorCode]    ; Again specify the 16-bit size
+    CALL DisplayNumber    ; Display the error code
+
+    ; Display newline
+    MOV AH, 09H
+    MOV DX, OFFSET NewLineC
+    INT 21H
+    RET
+
 ADD_COUPON ENDP
 
 

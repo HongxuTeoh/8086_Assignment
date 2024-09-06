@@ -624,11 +624,7 @@ EndPurchaseConditionally ENDP
 CheckContinueCondition PROC
     CMP AL, 'Y'
     CALL ContinuePurchaseConditionally
-    CMP AL, 'y'
-    CALL ContinuePurchaseConditionally
     CMP AL, 'N'
-    CALL InvalidConditionally
-    CMP AL, 'n'
     CALL InvalidConditionally
     RET
 CheckContinueCondition ENDP
@@ -641,8 +637,6 @@ InvalidConditionally ENDP
 
 CheckCouponCondition PROC
     CMP AL, 'Y'
-    CALL ApplyCouponConditionally
-    CMP AL, 'y'
     CALL ApplyCouponConditionally
     RET
 CheckCouponCondition ENDP

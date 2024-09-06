@@ -758,10 +758,11 @@ DisplayTotal PROC
     MOV DL, '$'
     MOV AH, 2
     INT 21h
-    CALL MAIN_MENU                ; After displaying total, go back to change to payment
+    CALL PAYMENT    ; After displaying total, go back to change to payment
 DisplayTotal ENDP
 
 ; -------------------------------------------------------------------------
+
 
  END MAIN
 ;----------------------------------------------------------------------- product price

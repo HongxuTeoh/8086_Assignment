@@ -38,10 +38,15 @@
 ; ------ Purchase  ------ ;
 
 ; ---------Payment --------;
-    CashPrompt DB 'Enter cash amount: $'
-    ChangeMsg DB 'Change: $'
-    InsufficientCashMsg DB '[ERROR] Insufficient cash! Please try again.$'
+    CashPrompt DB 13,10,'Enter cash amount: $'
+    ChangeMsg DB 13,10,'Change: $'
+    InsufficientCashMsg DB 13,10,'[ERROR] Insufficient cash! Please try again.$'
 
+;----------coupon-------------------;
+CouponFile DB 'coupon.txt', 0   ; Filename for the coupon file
+CouponBuffer DB 3 DUP(0)        ; Buffer to hold 3 characters from the file
+CouponAppliedMsg DB 13,10,'Coupon applied: $', 0
+ErrorMsgC DB 13,10,'Error accessing coupon file!$', 0
 
 ; ------ LOGIN  ------ ;
  Divider            DB  79 DUP ("="),"$"
@@ -669,17 +674,18 @@ SAVE_PRODUCT_PRICES PROC
 SAVE_PRODUCT_PRICES ENDP
 
 ; Error handling
-FILE_ERROR:
-    MOV DX, OFFSET ErrorMsg       ; Load error message
+FILE_ERRORC:
+    MOV DX, OFFSET ErrorMsgC       ; Load error message
     MOV AH, 09H                   ; DOS function: Display string
     INT 21H                       ; DOS interrupt
     JMP MAIN_MENU                 ; Return to main menu
 
-;----------------------------------------------------------------------- add coupon subroutine
-ADD_COUPON PROC
-; Coupon application
-RET                          ; Return back to the main menu
-ADD_COUPON ENDP
+
+FILE_ERROR:
+    MOV DX, OFFSET ErrorMsg    ; Display an error message if file error occurs
+    MOV AH, 9
+    INT 21H
+    JMP MAIN_MENU              ; Return to the main menu after error
 ApplyCoupon PROC
     MOV AX, [Total]
     MOV BX, [CouponDiscount]
@@ -718,6 +724,62 @@ InvalidCondition PROC
     JA Invalid
     RET
 InvalidCondition ENDP
+
+;----------------------------------------------------------------------- add coupon subroutine
+ADD_COUPON PROC 
+    ; Step 1: Open the coupon file
+    MOV AH, 3DH                ; DOS function: Open file
+    MOV AL, 0                  ; Open file in read-only mode
+    MOV DX, OFFSET CouponFile   ; Filename of the coupon text file
+    INT 21H                    ; DOS interrupt
+    JC FILE_ERRORC              ; Jump if an error occurs opening the file
+    MOV BX, AX                 ; BX holds the file handle
+
+    ; Step 2: Read the coupon value (up to 3 digits)
+    MOV AH, 3FH                ; DOS function: Read from file
+    MOV CX, 3                  ; Read 3 bytes (3-digit coupon value)
+    MOV DX, OFFSET CouponBuffer ; Buffer to store coupon value
+    INT 21H                    ; DOS interrupt
+    JC FILE_ERRORC              ; Jump if an error occurs reading the file
+
+    ; Step 3: Convert ASCII input to a number (coupon value)
+    XOR CX, CX                 ; Clear CX (will hold the coupon value)
+    MOV SI, OFFSET CouponBuffer ; Start at the first byte of the coupon buffer
+    XOR BX, BX                 ; Clear BX (used for calculation)
+
+ConvertCoupon:
+    MOV AL, [SI]               ; Load a character from the coupon buffer
+    CMP AL, 0DH                ; Check for the end of input (Enter key or end of file)
+    JE CouponProcess           ; If Enter key or end of file, jump to process the coupon
+    SUB AL, '0'                ; Convert ASCII to a digit
+    MOV AH, 0
+    MOV BX, 10
+    MUL BX                     ; Multiply existing value by 10
+    ADD CX, AX                 ; Add the new digit to CX
+    INC SI                     ; Move to the next character
+    JMP ConvertCoupon
+
+CouponProcess:
+    ; Now CX holds the coupon value, proceed to apply the coupon
+    ; You can add logic here to check if the coupon is valid, etc.
+
+    ; Display the coupon value (optional, for debugging)
+    MOV DX, OFFSET CouponAppliedMsg
+    MOV AH, 9
+    INT 21H
+    MOV AX, CX                 ; AX holds the coupon value
+    CALL DisplayNumber         ; Display the coupon value
+
+    ; Process the coupon further (e.g., apply discount or validate)
+    ; In this simple version, we are just displaying the coupon value.
+
+    ; Step 4: Close the file
+    MOV AH, 3EH                ; DOS function: Close file
+    MOV BX, AX                 ; BX holds the file handle
+    INT 21H                    ; DOS interrupt
+
+    RET                        ; Return to main menu                      ; Return back to the main menu
+ADD_COUPON ENDP
 
 
 Payment PROC
@@ -835,7 +897,7 @@ DisplayTotal PROC
     MOV DL, '$'
     MOV AH, 2
     INT 21h
-    CALL Payment               ; After displaying total, go back to change to payment
+    CALL Payment                ; After displaying total, go back to change to payment
 DisplayTotal ENDP
 
 ; -------------------------------------------------------------------------

@@ -2,17 +2,40 @@
 .STACK 64
 
 .DATA
- MenuOptions DB '1) Purchase$'
-            DB '2) Edit Product Price$'
-            DB '3) Add Coupon$'
-            DB '4) Logout$', 0
+; ------ Purchase  ------ ;
+    MenuOptions DB 13,10,'1) Purchase'
+                DB 13,10,'2) Edit Product Price'
+                DB 13,10,'3) Add Coupon'
+                DB 13,10,'4) Logout$'
 
- SelectPrompt DB 'Select product number to edit (1-4): $'
- FileName DB 'product.txt', 0
- ProductBuffer DB 100 DUP(0)       ; Buffer to store product data
- InputBuffer DB 5, 0, 5 DUP(0)     ; Input buffer: max 3 digits + Enter key
- EnterNewPricePrompt DB 'Enter new price (up to 3 digits): $'
- ErrorMsg DB 'Error opening or writing file!$', 0
+    ItemPrompt DB 13,10,'Items:'
+                DB 13,10,'1)VS Pro' 
+                DB 13,10,'2)Win10'
+                DB 13,10,'3)Win11'
+                DB 13,10,'4)Adobe'
+                DB 13,10,'5)Back: $'
+
+    QuantityPrompt DB 13,10,'Quantity (1-9): $'
+    ContinuePrompt DB 13,10,'Continue? (Y/N): $'
+    CouponPrompt DB 13,10,'Coupon? (Y/N): $'
+    SubtotalMsg DB 13,10,'Subtotal: $'
+    DiscountMsg DB 13,10,'After Discount, Total: $'
+    TotalMsg DB 13,10,'Total: $'
+    InvalidMsg DB 13,10,'Invalid choice!$'
+    FileName DB 'product.txt', 0
+
+    SelectPrompt DB 13,10,'Select product number to edit (1-4): $'
+    ProductBuffer DB 100 DUP(0)       ; Buffer to store product data
+    InputBuffer DB 5, 0, 5 DUP(0)     ; Input buffer: max 3 digits + Enter key
+    EnterNewPricePrompt DB 13,10,'Enter new price (up to 3 digits): $'
+    ErrorMsg DB 13,10,'Error opening or writing file!$', 0
+
+    Prices DW 500, 120, 150, 300   ; Prices for the items
+    Subtotal DW 0                  ; Subtotal for the current purchase
+    Total DW 0                     ; Total across all purchases
+    CouponDiscount DW 10           ; Discount percentage
+
+; ------ Purchase  ------ ;
 
 ; ------ LOGIN  ------ ;
  Divider            DB  79 DUP ("="),"$"
@@ -256,7 +279,7 @@ LOGIN PROC
             MOV     AH,07H
             INT     21H
             MOV     ConfirmPassword[SI],AL
-            INC     SI
+            INC     SI  
             MOV     AH,02H
             MOV     DL,"*"
             INT     21H
@@ -452,11 +475,16 @@ LOGIN PROC
         JMP     CHOICE_AGAIN
 LOGIN ENDP
 
+;----------------------------------------------------------------------- main menu
 MAIN_MENU PROC
     ; Display menu options
     MOV DX, OFFSET MenuOptions ; Load the offset of the menu options string
     MOV AH, 09H                ; DOS function to display a string
     INT 21H                    ; Call DOS interrupt
+
+    MOV AH,09H
+    LEA DX, NewLine
+    INT 21H
 
     ; Get user input
     MOV AH, 01H                ; DOS function to read a character from the keyboard
@@ -465,192 +493,145 @@ MAIN_MENU PROC
 
     ; Handle user selection
     CMP AL, 1                  ; Compare input with 1
-    JE PURCHASE                ; Jump to PURCHASE if input is 1
+    JE PURCHASE_S              ; Jump to PURCHASE if input is 1
     CMP AL, 2                  ; Compare input with 2
-    JE EDIT_PRICE              ; Jump to EDIT_PRICE if input is 2
+    JE EDIT_PRODUCT_PRICE_S      ; Jump to EDIT_PRODUCT_PRICE if input is 2
     CMP AL, 3                  ; Compare input with 3
-    JE ADD_COUPON              ; Jump to ADD_COUPON if input is 3
+    JE ADD_COUPON_S              ; Jump to ADD_COUPON if input is 3
     CMP AL, 4                  ; Compare input with 4
-    JE LOGOUT                  ; Jump to LOGOUT if input is 4
+    JE LOGOUT_S                  ; Jump to LOGOUT if input is 4
 
     JMP MAIN_MENU              ; Repeat menu if input is invalid
 
+    PURCHASE_S:
+        CALL Purchase
+    EDIT_PRODUCT_PRICE_S:
+        CALL EDIT_PRODUCT_PRICE
+    ADD_COUPON_S:
+        CALL ADD_COUPON
+    LOGOUT_S:
+        CALL LOGOUT
+
 MAIN_MENU ENDP
+;----------------------------------------------------------------------- main menu
 
+;----------------------------------------------------------------------- purchase subroutine
+ContinuePurchaseConditionally PROC
+    JE Purchase
+    RET
+ContinuePurchaseConditionally ENDP
+
+Purchase PROC
+    MOV DX, OFFSET ItemPrompt
+    MOV AH, 9
+    INT 21h
+
+    MOV AH,09H
+    LEA DX, NewLine
+    INT 21H
+
+    ; Get item choice
+    MOV AH, 1
+    INT 21h
+    SUB AL, '0'
+    CALL InvalidCondition        ; Check if item choice is valid
+
+    CMP AL, 5
+    CALL EndPurchaseConditionally
+
+    ; Get quantity
+    MOV DX, OFFSET QuantityPrompt
+    MOV AH, 9
+    INT 21h
+
+    MOV AH, 1
+    INT 21h
+    SUB AL, '0'
+
+    ; Calculate subtotal
+    XOR AH, AH
+    PUSH AX  ; Save quantity
+    MOV BX, AX
+    DEC BX
+    SHL BX, 1  ; BX = (choice - 1) * 2
+    MOV AX, Prices[BX]
+    POP BX  ; Retrieve quantity
+    MUL BX
+    ADD [Subtotal], AX  ; Use memory operand
+
+    ; Display current subtotal
+    MOV DX, OFFSET SubtotalMsg
+    MOV AH, 9
+    INT 21h
+    MOV AX, [Subtotal]
+    CALL DisplayNumber
+    MOV DL, '$'
+    MOV AH, 2
+    INT 21h
+
+    ; Ask to continue
+    MOV DX, OFFSET ContinuePrompt
+    MOV AH, 9
+    INT 21h
+
+    MOV AH, 1
+    INT 21h
+    CALL CheckContinueCondition
+    ; Add subtotal to total
+    MOV AX, [Subtotal]
+    ADD [Total], AX
+    MOV WORD PTR [Subtotal], 0  ; Reset subtotal for next purchase
+
+    ; Ask for coupon
+    MOV DX, OFFSET CouponPrompt
+    MOV AH, 9
+    INT 21h
+
+    MOV AH, 1
+    INT 21h
+    CALL CheckCouponCondition
+    JMP DisplayTotal
+
+EndPurchaseConditionally PROC
+    CMP AL, 5
+    JE EndPurchase
+    RET
+EndPurchaseConditionally ENDP
+
+CheckContinueCondition PROC
+    CMP AL, 'Y'
+    CALL ContinuePurchaseConditionally
+    CMP AL, 'N'
+    CALL InvalidConditionally
+    RET
+CheckContinueCondition ENDP
+
+
+InvalidConditionally PROC
+    JNE Invalid
+    RET
+InvalidConditionally ENDP
+
+CheckCouponCondition PROC
+    CMP AL, 'Y'
+    CALL ApplyCouponConditionally
+    RET
+CheckCouponCondition ENDP
+
+ApplyCouponConditionally PROC
+    JE ApplyCoupon
+    RET
+ApplyCouponConditionally ENDP
+
+EndPurchase:
+    RET
+Purchase ENDP
+;----------------------------------------------------------------------- purchase subroutine
+
+;----------------------------------------------------------------------- product price
 EDIT_PRODUCT_PRICE PROC
-        ; Open product.txt file
-        MOV DX, OFFSET product.txt    ; Load file name
-        MOV AH, 3DH                    ; DOS function: Open file
-        MOV AL, 0                      ; Open for read only
-        INT 21H                        ; DOS interrupt
-        JC FILE_ERROR                  ; Jump if error (Carry Flag set)
-        MOV BX, AX                     ; File handle
-
-        ; Read file content into memory
-        MOV AH, 3FH                    ; DOS function: Read file
-        MOV CX, 100                    ; Read up to 100 bytes
-        MOV DX, OFFSET ProductBuffer   ; Buffer to store file data
-        INT 21H                        ; DOS interrupt
-
-        ; Close file
-        MOV AH, 3EH                    ; DOS function: Close file
-        INT 21H                        ; DOS interrupt
-
-        ; Display product list
-        MOV DX, OFFSET ProductBuffer   ; Load product buffer
-        CALL DISPLAY_PRODUCTS          ; Call function to display products
-
-        ; Edit product price
-        CALL GET_USER_SELECTION        ; Get product selection from user
-        CMP AL, '1'                    ; Check if user selects product 1
-        JE EDIT_PRICE_1                ; Jump if true
-        CMP AL, '2'                    ; Check if user selects product 2
-        JE EDIT_PRICE_2                ; Jump if true
-        CMP AL, '3'                    ; Check if user selects product 3
-        JE EDIT_PRICE_3                ; Jump if true
-        CMP AL, '4'                    ; Check if user selects product 4
-        JE EDIT_PRICE_4                ; Jump if true
-
-        ; Update the selected product price
-    EDIT_PRICE_1:
-    MOV DX, OFFSET EnterNewPricePrompt  ; Prompt for new price
-    MOV AH, 09H                         ; DOS function: Display string
-    INT 21H                             ; DOS interrupt
-
-    ; Read new price from user
-    MOV AH, 0AH                         ; DOS function: Buffered input
-    MOV DX, OFFSET InputBuffer          ; Buffer to store input
-    INT 21H                             ; DOS interrupt
-
-    ; Convert ASCII input to a number (3-digit support)
-    MOV SI, OFFSET InputBuffer + 2      ; Start after length byte
-    XOR BX, BX                          ; Clear BX for number
-    XOR CX, CX                          ; Clear CX for digit count
-
-    ReadNextDigit:
-        MOV AL, [SI]                        ; Load character from buffer
-        CMP AL, 0DH                         ; Check for Enter key (Carriage Return)
-        JE StorePrice1                      ; If Enter, store the price
-
-        SUB AL, '0'                         ; Convert ASCII to number
-        MOV AH, 0                           ; Clear AH for multiplication
-        MOV CX, 10                          ; Base 10 for digit shifting
-        MUL CX                              ; Multiply BX (current total) by 10
-        ADD BL, AL                          ; Add new digit
-        INC SI                              ; Move to next character
-        JMP ReadNextDigit                   ; Continue reading digits
-
-    StorePrice1:
-        ; Store new price in ProductBuffer
-        MOV BYTE PTR ProductBuffer + 32, BL ; Assuming price for product 1 is at offset 32
-        JMP SAVE_PRICES                     ; Jump to save prices                    
-
-    EDIT_PRICE_2:
-    MOV DX, OFFSET EnterNewPricePrompt  ; Prompt for new price
-    MOV AH, 09H                         ; DOS function: Display string
-    INT 21H                             ; DOS interrupt
-
-    ; Read new price from user
-    MOV AH, 0AH                         ; DOS function: Buffered input
-    MOV DX, OFFSET InputBuffer          ; Buffer to store input
-    INT 21H                             ; DOS interrupt
-
-    ; Convert ASCII input to a number (3-digit support)
-    MOV SI, OFFSET InputBuffer + 2      ; Start after length byte
-    XOR BX, BX                          ; Clear BX for number
-    XOR CX, CX                          ; Clear CX for digit count
-
-    ReadNextDigit:
-        MOV AL, [SI]                        ; Load character from buffer
-        CMP AL, 0DH                         ; Check for Enter key (Carriage Return)
-        JE StorePrice1                      ; If Enter, store the price
-
-        SUB AL, '0'                         ; Convert ASCII to number
-        MOV AH, 0                           ; Clear AH for multiplication
-        MOV CX, 10                          ; Base 10 for digit shifting
-        MUL CX                              ; Multiply BX (current total) by 10
-        ADD BL, AL                          ; Add new digit
-        INC SI                              ; Move to next character
-        JMP ReadNextDigit                   ; Continue reading digits
-
-    StorePrice2:
-        ; Store new price in ProductBuffer
-        MOV BYTE PTR ProductBuffer + 32, BL ; Assuming price for product 1 is at offset 32
-        JMP SAVE_PRICES                     ; Jump to save prices 
-
-    EDIT_PRICE_3:
-    MOV DX, OFFSET EnterNewPricePrompt  ; Prompt for new price
-    MOV AH, 09H                         ; DOS function: Display string
-    INT 21H                             ; DOS interrupt
-
-    ; Read new price from user
-    MOV AH, 0AH                         ; DOS function: Buffered input
-    MOV DX, OFFSET InputBuffer          ; Buffer to store input
-    INT 21H                             ; DOS interrupt
-
-    ; Convert ASCII input to a number (3-digit support)
-    MOV SI, OFFSET InputBuffer + 2      ; Start after length byte
-    XOR BX, BX                          ; Clear BX for number
-    XOR CX, CX                          ; Clear CX for digit count
-
-    ReadNextDigit:
-        MOV AL, [SI]                        ; Load character from buffer
-        CMP AL, 0DH                         ; Check for Enter key (Carriage Return)
-        JE StorePrice1                      ; If Enter, store the price
-
-        SUB AL, '0'                         ; Convert ASCII to number
-        MOV AH, 0                           ; Clear AH for multiplication
-        MOV CX, 10                          ; Base 10 for digit shifting
-        MUL CX                              ; Multiply BX (current total) by 10
-        ADD BL, AL                          ; Add new digit
-        INC SI                              ; Move to next character
-        JMP ReadNextDigit                   ; Continue reading digits
-
-    StorePrice3:
-        ; Store new price in ProductBuffer
-        MOV BYTE PTR ProductBuffer + 32, BL ; Assuming price for product 1 is at offset 32
-        JMP SAVE_PRICES                     ; Jump to save prices 
-
-    EDIT_PRICE_4:
-    MOV DX, OFFSET EnterNewPricePrompt  ; Prompt for new price
-    MOV AH, 09H                         ; DOS function: Display string
-    INT 21H                             ; DOS interrupt
-
-    ; Read new price from user
-    MOV AH, 0AH                         ; DOS function: Buffered input
-    MOV DX, OFFSET InputBuffer          ; Buffer to store input
-    INT 21H                             ; DOS interrupt
-
-    ; Convert ASCII input to a number (3-digit support)
-    MOV SI, OFFSET InputBuffer + 2      ; Start after length byte
-    XOR BX, BX                          ; Clear BX for number
-    XOR CX, CX                          ; Clear CX for digit count
-
-    ReadNextDigit:
-        MOV AL, [SI]                        ; Load character from buffer
-        CMP AL, 0DH                         ; Check for Enter key (Carriage Return)
-        JE StorePrice1                      ; If Enter, store the price
-
-        SUB AL, '0'                         ; Convert ASCII to number
-        MOV AH, 0                           ; Clear AH for multiplication
-        MOV CX, 10                          ; Base 10 for digit shifting
-        MUL CX                              ; Multiply BX (current total) by 10
-        ADD BL, AL                          ; Add new digit
-        INC SI                              ; Move to next character
-        JMP ReadNextDigit                   ; Continue reading digits
-
-    StorePrice4:
-        ; Store new price in ProductBuffer
-        MOV BYTE PTR ProductBuffer + 32, BL ; Assuming price for product 1 is at offset 32
-        JMP SAVE_PRICES                     ; Jump to save prices 
-
-        JMP MAIN_MENU                  ; Return to main menu
-
+        
 EDIT_PRODUCT_PRICE ENDP
-
-; Data section
-FileName DB 'product.txt', 0
-ProductBuffer DB 100 DUP(0)       ; Buffer to store product data
 
 ; Display function
 DISPLAY_PRODUCTS PROC
@@ -666,38 +647,12 @@ DISPLAY_PRODUCTS ENDP
 
 ; Get user selection function
 GET_USER_SELECTION PROC
-    MOV DX, OFFSET EditPrompt     ; Load prompt message
-    MOV AH, 09H                   ; DOS function: Display string
-    INT 21H                       ; Call DOS interrupt
 
-    MOV AH, 01H                   ; DOS function: Read character from keyboard
-    INT 21H                       ; Call DOS interrupt
-    SUB AL, '0'                   ; Convert ASCII to numeric value (0-9)
-    MOV PriceInput, AL            ; Store new price input
-    RET
 GET_USER_SELECTION ENDP
 
 ; Save function
 SAVE_PRODUCT_PRICES PROC
-    MOV DX, OFFSET FileName       ; Load file name
-    MOV AH, 3CH                   ; DOS function: Create or truncate file
-    MOV CX, 0                     ; Normal file
-    INT 21H                       ; DOS interrupt
-    JC FILE_ERROR                 ; Jump if error (Carry Flag set)
-    MOV BX, AX                    ; Save file handle
 
-    ; Write updated prices to file
-    MOV AH, 40H                   ; DOS function: Write to file
-    MOV CX, 100                   ; Number of bytes to write
-    MOV DX, OFFSET ProductBuffer  ; Buffer containing data to write
-    INT 21H                       ; DOS interrupt
-
-    ; Close file
-    MOV AH, 3EH                   ; DOS function: Close file
-    MOV BX, AX                    ; Use file handle
-    INT 21H                       ; DOS interrupt
-
-    RET
 SAVE_PRODUCT_PRICES ENDP
 
 ; Error handling
@@ -707,6 +662,106 @@ FILE_ERROR:
     INT 21H                       ; DOS interrupt
     JMP MAIN_MENU                 ; Return to main menu
 
+;----------------------------------------------------------------------- add coupon subroutine
+ADD_COUPON PROC
+; Coupon application
+ADD_COUPON ENDP
+ApplyCoupon PROC
+    MOV AX, [Total]
+    MOV BX, [CouponDiscount]
+    MUL BX
+    MOV BX, 100
+    DIV BX
+    SUB [Total], AX
+
+    ; Display total after discount
+    MOV DX, OFFSET DiscountMsg
+    MOV AH, 9
+    INT 21h
+    MOV AX, [Total]
+    CALL DisplayNumber
+    MOV DL, '$'
+    MOV AH, 2
+    INT 21h
+    CALL DisplayTotal            ; After applying coupon, display total
+ApplyCoupon ENDP
+    RET                          ; Return back to the main menu
+
+;----------------------------------------------------------------------- add coupon subroutine
+;----------------------------------------------------------------------- logout subroutine
+LOGOUT PROC
+    ; Code for logging out (if needed)
+    MOV AH, 4CH                  ; DOS function to terminate program
+    INT 21H                      ; Call DOS interrupt to exit
+LOGOUT ENDP
+;----------------------------------------------------------------------- logout subroutine
+; -------------------------------------------------------------------------
+; Invalid condition handling
+InvalidCondition PROC
+    CMP AL, 1
+    JB Invalid
+    CMP AL, 4
+    JA Invalid
+    RET
+InvalidCondition ENDP
+
+; -------------------------------------------------------------------------
+; Invalid input handling
+Invalid PROC
+    MOV DX, OFFSET InvalidMsg
+    MOV AH, 9
+    INT 21h
+    JMP MAIN_MENU
+Invalid ENDP
+
+; -------------------------------------------------------------------------
+; Helper routine to display the number in AX
+DisplayNumber PROC
+    PUSH AX
+    PUSH BX
+    PUSH CX
+    PUSH DX
+
+    MOV BX, 10         ; Prepare to divide by 10 to get digits
+    XOR CX, CX         ; CX will count digits
+
+NextDigit:
+    XOR DX, DX         ; Clear DX for division
+    DIV BX             ; Divide AX by 10, quotient in AX, remainder in DX
+    PUSH DX            ; Push remainder (digit) to the stack
+    INC CX             ; Count digits
+    TEST AX, AX        ; Check if quotient is 0
+    JNZ NextDigit      ; If not zero, continue extracting digits
+
+PrintDigits:
+    POP DX             ; Get digit
+    ADD DL, '0'        ; Convert it to ASCII
+    MOV AH, 2          ; DOS print character function
+    INT 21h
+    LOOP PrintDigits
+
+    POP DX
+    POP CX
+    POP BX
+    POP AX
+    RET
+DisplayNumber ENDP
+
+; -------------------------------------------------------------------------
+; -------------------------------------------------------------------------
+DisplayTotal PROC
+    MOV DX, OFFSET TotalMsg
+    MOV AH, 9
+    INT 21h
+    MOV AX, [Total]
+    CALL DisplayNumber
+    MOV DL, '$'
+    MOV AH, 2
+    INT 21h
+    CALL MAIN_MENU                ; After displaying total, go back to change to payment
+DisplayTotal ENDP
+
+; -------------------------------------------------------------------------
 
  END MAIN
-
+;----------------------------------------------------------------------- product price

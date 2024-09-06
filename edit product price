@@ -1,0 +1,203 @@
+; Open product.txt file
+        MOV DX, OFFSET product.txt    ; Load file name
+        MOV AH, 3DH                    ; DOS function: Open file
+        MOV AL, 0                      ; Open for read only
+        INT 21H                        ; DOS interrupt
+        JC FILE_ERROR                  ; Jump if error (Carry Flag set)
+        MOV BX, AX                     ; File handle
+
+        ; Read file content into memory
+        MOV AH, 3FH                    ; DOS function: Read file
+        MOV CX, 100                    ; Read up to 100 bytes
+        MOV DX, OFFSET ProductBuffer   ; Buffer to store file data
+        INT 21H                        ; DOS interrupt
+
+        ; Close file
+        MOV AH, 3EH                    ; DOS function: Close file
+        INT 21H                        ; DOS interrupt
+
+        ; Display product list
+        MOV DX, OFFSET ProductBuffer   ; Load product buffer
+        CALL DISPLAY_PRODUCTS          ; Call function to display products
+
+        ; Edit product price
+        CALL GET_USER_SELECTION        ; Get product selection from user
+        CMP AL, '1'                    ; Check if user selects product 1
+        JE EDIT_PRICE_1                ; Jump if true
+        CMP AL, '2'                    ; Check if user selects product 2
+        JE EDIT_PRICE_2                ; Jump if true
+        CMP AL, '3'                    ; Check if user selects product 3
+        JE EDIT_PRICE_3                ; Jump if true
+        CMP AL, '4'                    ; Check if user selects product 4
+        JE EDIT_PRICE_4                ; Jump if true
+
+        ; Update the selected product price
+    EDIT_PRICE_1:
+    MOV DX, OFFSET EnterNewPricePrompt  ; Prompt for new price
+    MOV AH, 09H                         ; DOS function: Display string
+    INT 21H                             ; DOS interrupt
+
+    ; Read new price from user
+    MOV AH, 0AH                         ; DOS function: Buffered input
+    MOV DX, OFFSET InputBuffer          ; Buffer to store input
+    INT 21H                             ; DOS interrupt
+
+    ; Convert ASCII input to a number (3-digit support)
+    MOV SI, OFFSET InputBuffer + 2      ; Start after length byte
+    XOR BX, BX                          ; Clear BX for number
+    XOR CX, CX                          ; Clear CX for digit count
+
+    ReadNextDigit:
+        MOV AL, [SI]                        ; Load character from buffer
+        CMP AL, 0DH                         ; Check for Enter key (Carriage Return)
+        JE StorePrice1                      ; If Enter, store the price
+
+        SUB AL, '0'                         ; Convert ASCII to number
+        MOV AH, 0                           ; Clear AH for multiplication
+        MOV CX, 10                          ; Base 10 for digit shifting
+        MUL CX                              ; Multiply BX (current total) by 10
+        ADD BL, AL                          ; Add new digit
+        INC SI                              ; Move to next character
+        JMP ReadNextDigit                   ; Continue reading digits
+
+    StorePrice1:
+        ; Store new price in ProductBuffer
+        MOV BYTE PTR ProductBuffer + 32, BL ; Assuming price for product 1 is at offset 32
+        JMP SAVE_PRICES                     ; Jump to save prices                    
+
+    EDIT_PRICE_2:
+    MOV DX, OFFSET EnterNewPricePrompt  ; Prompt for new price
+    MOV AH, 09H                         ; DOS function: Display string
+    INT 21H                             ; DOS interrupt
+
+    ; Read new price from user
+    MOV AH, 0AH                         ; DOS function: Buffered input
+    MOV DX, OFFSET InputBuffer          ; Buffer to store input
+    INT 21H                             ; DOS interrupt
+
+    ; Convert ASCII input to a number (3-digit support)
+    MOV SI, OFFSET InputBuffer + 2      ; Start after length byte
+    XOR BX, BX                          ; Clear BX for number
+    XOR CX, CX                          ; Clear CX for digit count
+
+    ReadNextDigit:
+        MOV AL, [SI]                        ; Load character from buffer
+        CMP AL, 0DH                         ; Check for Enter key (Carriage Return)
+        JE StorePrice1                      ; If Enter, store the price
+
+        SUB AL, '0'                         ; Convert ASCII to number
+        MOV AH, 0                           ; Clear AH for multiplication
+        MOV CX, 10                          ; Base 10 for digit shifting
+        MUL CX                              ; Multiply BX (current total) by 10
+        ADD BL, AL                          ; Add new digit
+        INC SI                              ; Move to next character
+        JMP ReadNextDigit                   ; Continue reading digits
+
+    StorePrice2:
+        ; Store new price in ProductBuffer
+        MOV BYTE PTR ProductBuffer + 32, BL ; Assuming price for product 1 is at offset 32
+        JMP SAVE_PRICES                     ; Jump to save prices 
+
+    EDIT_PRICE_3:
+    MOV DX, OFFSET EnterNewPricePrompt  ; Prompt for new price
+    MOV AH, 09H                         ; DOS function: Display string
+    INT 21H                             ; DOS interrupt
+
+    ; Read new price from user
+    MOV AH, 0AH                         ; DOS function: Buffered input
+    MOV DX, OFFSET InputBuffer          ; Buffer to store input
+    INT 21H                             ; DOS interrupt
+
+    ; Convert ASCII input to a number (3-digit support)
+    MOV SI, OFFSET InputBuffer + 2      ; Start after length byte
+    XOR BX, BX                          ; Clear BX for number
+    XOR CX, CX                          ; Clear CX for digit count
+
+    ReadNextDigit:
+        MOV AL, [SI]                        ; Load character from buffer
+        CMP AL, 0DH                         ; Check for Enter key (Carriage Return)
+        JE StorePrice1                      ; If Enter, store the price
+
+        SUB AL, '0'                         ; Convert ASCII to number
+        MOV AH, 0                           ; Clear AH for multiplication
+        MOV CX, 10                          ; Base 10 for digit shifting
+        MUL CX                              ; Multiply BX (current total) by 10
+        ADD BL, AL                          ; Add new digit
+        INC SI                              ; Move to next character
+        JMP ReadNextDigit                   ; Continue reading digits
+
+    StorePrice3:
+        ; Store new price in ProductBuffer
+        MOV BYTE PTR ProductBuffer + 32, BL ; Assuming price for product 1 is at offset 32
+        JMP SAVE_PRICES                     ; Jump to save prices 
+
+    EDIT_PRICE_4:
+    MOV DX, OFFSET EnterNewPricePrompt  ; Prompt for new price
+    MOV AH, 09H                         ; DOS function: Display string
+    INT 21H                             ; DOS interrupt
+
+    ; Read new price from user
+    MOV AH, 0AH                         ; DOS function: Buffered input
+    MOV DX, OFFSET InputBuffer          ; Buffer to store input
+    INT 21H                             ; DOS interrupt
+
+    ; Convert ASCII input to a number (3-digit support)
+    MOV SI, OFFSET InputBuffer + 2      ; Start after length byte
+    XOR BX, BX                          ; Clear BX for number
+    XOR CX, CX                          ; Clear CX for digit count
+
+    ReadNextDigit:
+        MOV AL, [SI]                        ; Load character from buffer
+        CMP AL, 0DH                         ; Check for Enter key (Carriage Return)
+        JE StorePrice1                      ; If Enter, store the price
+
+        SUB AL, '0'                         ; Convert ASCII to number
+        MOV AH, 0                           ; Clear AH for multiplication
+        MOV CX, 10                          ; Base 10 for digit shifting
+        MUL CX                              ; Multiply BX (current total) by 10
+        ADD BL, AL                          ; Add new digit
+        INC SI                              ; Move to next character
+        JMP ReadNextDigit                   ; Continue reading digits
+
+    StorePrice4:
+        ; Store new price in ProductBuffer
+        MOV BYTE PTR ProductBuffer + 32, BL ; Assuming price for product 1 is at offset 32
+        JMP SAVE_PRICES                     ; Jump to save prices 
+
+        JMP MAIN_MENU                  ; Return to main menu
+
+
+GET_USER_SELECTION PROC
+    MOV DX, OFFSET EditPrompt     ; Load prompt message
+    MOV AH, 09H                   ; DOS function: Display string
+    INT 21H                       ; Call DOS interrupt
+
+    MOV AH, 01H                   ; DOS function: Read character from keyboard
+    INT 21H                       ; Call DOS interrupt
+    SUB AL, '0'                   ; Convert ASCII to numeric value (0-9)
+    MOV PriceInput, AL            ; Store new price input
+    RET
+GET_USER_SELECTION ENDP
+
+; Save function
+SAVE_PRODUCT_PRICES PROC
+    MOV DX, OFFSET FileName       ; Load file name
+    MOV AH, 3CH                   ; DOS function: Create or truncate file
+    MOV CX, 0                     ; Normal file
+    INT 21H                       ; DOS interrupt
+    JC FILE_ERROR                 ; Jump if error (Carry Flag set)
+    MOV BX, AX                    ; Save file handle
+
+    ; Write updated prices to file
+    MOV AH, 40H                   ; DOS function: Write to file
+    MOV CX, 100                   ; Number of bytes to write
+    MOV DX, OFFSET ProductBuffer  ; Buffer containing data to write
+    INT 21H                       ; DOS interrupt
+
+    ; Close file
+    MOV AH, 3EH                   ; DOS function: Close file
+    MOV BX, AX                    ; Use file handle
+    INT 21H                       ; DOS interrupt
+
+    RET
+SAVE_PRODUCT_PRICES ENDP

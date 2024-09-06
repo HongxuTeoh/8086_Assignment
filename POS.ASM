@@ -41,7 +41,7 @@
     CashPrompt DB 'Enter cash amount: $'
     ChangeMsg DB 'Change: $'
     InsufficientCashMsg DB '[ERROR] Insufficient cash! Please try again.$'
-    InputBuffer DB 5, 0, 5 DUP(0)  ; Input buffer: max 5 digits + Enter key
+
 
 ; ------ LOGIN  ------ ;
  Divider            DB  79 DUP ("="),"$"
@@ -697,8 +697,28 @@ ApplyCoupon PROC
     MOV DL, '$'
     MOV AH, 2
     INT 21h
-    CALL Payment            ; After applying coupon, display total
+    CALL DisplayTotal            ; After applying coupon, display total
 ApplyCoupon ENDP
+
+; -------------------------------------------------------------------------
+; Invalid input handling
+Invalid PROC
+    MOV DX, OFFSET InvalidMsg
+    MOV AH, 9
+    INT 21h
+    JMP MAIN_MENU
+Invalid ENDP
+
+; -------------------------------------------------------------------------
+
+InvalidCondition PROC
+    CMP AL, 1
+    JB Invalid
+    CMP AL, 4
+    JA Invalid
+    RET
+InvalidCondition ENDP
+
 
 Payment PROC
     ; Prompt for cash input
@@ -769,24 +789,9 @@ LOGOUT ENDP
 ;----------------------------------------------------------------------- logout subroutine
 ; -------------------------------------------------------------------------
 ; Invalid condition handling
-InvalidCondition PROC
-    CMP AL, 1
-    JB Invalid
-    CMP AL, 4
-    JA Invalid
-    RET
-InvalidCondition ENDP
 
-; -------------------------------------------------------------------------
-; Invalid input handling
-Invalid PROC
-    MOV DX, OFFSET InvalidMsg
-    MOV AH, 9
-    INT 21h
-    JMP MAIN_MENU
-Invalid ENDP
 
-; -------------------------------------------------------------------------
+
 ; Helper routine to display the number in AX
 DisplayNumber PROC
     PUSH AX
@@ -830,11 +835,10 @@ DisplayTotal PROC
     MOV DL, '$'
     MOV AH, 2
     INT 21h
-    CALL PAYMENT    ; After displaying total, go back to change to payment
+    CALL Payment               ; After displaying total, go back to change to payment
 DisplayTotal ENDP
 
 ; -------------------------------------------------------------------------
-
 
  END MAIN
 ;----------------------------------------------------------------------- product price

@@ -9,10 +9,10 @@
                 DB 13,10,'4) Logout$'
 
     ItemPrompt DB 13,10,'Items:'
-                DB 13,10,'1)VS Pro' 
-                DB 13,10,'2)Win10'
-                DB 13,10,'3)Win11'
-                DB 13,10,'4)Adobe'
+                DB 13,10,'1)VS Pro - RM 500' 
+                DB 13,10,'2)Win10  - RM 120'
+                DB 13,10,'3)Win11  - RM 150'
+                DB 13,10,'4)Adobe  - RM 300'
                 DB 13,10,'5)Back: $'
 
     QuantityPrompt DB 13,10,'Quantity (1-9): $'
@@ -865,9 +865,9 @@ Payment PROC
         INT     21H
 
         ; Convert ASCII input to a number (AX = cash amount)
-        XOR     CX, CX
-        MOV     CL, NUMBER_MAX_65535_INPUT_MAX
-        MOV     SI, 0 ; Also the number of digits in the string
+        XOR     CX, CX      ; clear AX
+        MOV     CL, NUMBER_MAX_65535_INPUT_MAX  ; total 5 digit number + 1 enter key
+        MOV     SI, 0 
 
     FIND_NUMBER_MAX_65535_INPUT_EOS:
         CMP     NUMBER_MAX_65535_INPUT_ADATA[SI], 0DH ; ENTER key
@@ -886,14 +886,14 @@ Payment PROC
         JMP     GetCashInput
     FOUND_NUMBER_MAX_65535_INPUT_EOS:
         CMP     SI, 0
-        JE      NUMBER_MAX_65535_NON_DIGIT_INPUT_FOUND ; Reject empty input
+        JE      NUMBER_MAX_65535_NON_DIGIT_INPUT_FOUND ; Reject empty input (eg. user just tap enter)
         ; AX = Original character, Multiplication result
         MOV     BX, 1 ; Current magnitude of 10 (1, 10, 100)
         MOV     CX, 0 ; Sum
 
     NUMBER_MAX_65535_CONVERT_TO_BYTE_LOOP:
-        DEC     SI
-        XOR     AX, AX
+        DEC     SI      ; SI - 1 for the last value "ENTER"
+        XOR     AX, AX  ; clear AX
         MOV     AL, NUMBER_MAX_65535_INPUT_ADATA[SI]
         SUB     AL, 30H
         MUL     BX
@@ -908,7 +908,7 @@ Payment PROC
         CMP     SI, 0
         JNE     NUMBER_MAX_65535_CONVERT_TO_BYTE_LOOP
 
-    MOV     DX, CX
+    MOV     BX, CX
     JMP     CalculateChange
 
     NUMBER_MAX_65535_LIMIT_EXCEEDED:
@@ -918,16 +918,15 @@ Payment PROC
         JMP     GetCashInput
     
     CalculateChange:
-        CMP     DX,[Total]
+        CMP     BX,[Total]
         JB      NOT_ENOUGH_TO_PAID
-
-        SUB     DX,[Total]
-        XOR     AX,AX
-        MOV     AX,DX
-
+            
         MOV     AH,09H
         LEA     DX,ChangeMsg
         INT     21H
+
+        SUB     BX,[Total]
+        MOV     AX,BX
         CALL    DisplayNumber
 
         JMP PaymentDone   ; Proceed to end of payment
@@ -956,9 +955,10 @@ Payment PROC
         JNE     PaymentDone
 
         RETURN_BACK:
-            CALL MAIN_MENU
+            MOV     [Total],0
+            CALL    MAIN_MENU
         LOG_OUT:
-            CALL EXIT_LOGIN
+            CALL    EXIT_LOGIN
 
 Payment ENDP
     
@@ -977,7 +977,7 @@ LOGOUT ENDP
 
 
 ; Helper routine to display the number in AX
-DisplayNumber PROC
+DisplayNumber PROC      ; after testing, this proc is correct
     PUSH AX
     PUSH BX
     PUSH CX
